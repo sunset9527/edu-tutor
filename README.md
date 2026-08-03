@@ -60,7 +60,7 @@
 - 📅 复习调度：`review_plans` 表，记忆写入自动建计划，到期可查（`ReviewScheduler`），API：复习打卡 / 计划查询
 - 🔍 检索遗忘加权：向量召回按保留率重排（`retriever._vector_search`）
 - 📚 知识引擎（LLM Wiki 模式）：PDF 课本 → 知识点互链图谱 → `knowledge_points` + `knowledge_point_links` + `knowledge_vectors`
-- 📊 知识库（人教版数学七年级上册，已编译+去重）：**113 个知识点 / 223 条边 / 连接率 92.9%**
+- 📊 知识库（三科七年级上册，已编译+去重）：**数学 113 + 语文 125 + 生物 109 = 347 个知识点 / 601 条边**（数学连接率 92.9% / 语文 87.2% / 生物 98.2%）
 - 🔗 双引擎桥：记忆写入自动关联知识点（`knowledge_point_id`）
 
 ### v0.2 — 记忆引擎 MVP（2026-08-02）
