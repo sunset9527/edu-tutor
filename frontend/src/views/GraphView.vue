@@ -5,7 +5,12 @@
         <el-card shadow="never" class="fill-card">
           <template #header>
             <div class="row-between">
-              <span>🕸️ 初中数学知识图谱（{{ graph.nodes.length }} 节点 · {{ graph.edges.length }} 边）</span>
+              <div class="row-between" style="gap: 12px">
+                <el-select v-model="subject" style="width: 110px" @change="load">
+                  <el-option v-for="s in subjects" :key="s" :label="s" :value="s" />
+                </el-select>
+                <span>🕸️ {{ subject }} 知识图谱（{{ graph.nodes.length }} 节点 · {{ graph.edges.length }} 边）</span>
+              </div>
               <el-tag type="success" effect="plain">连接率 {{ (connectRate * 100).toFixed(1) }}%</el-tag>
             </div>
           </template>
@@ -45,9 +50,17 @@ import { eduApi, type GraphData } from '../api/edu'
 
 use([CanvasRenderer, GraphChart, TooltipComponent])
 
+const subjects = ['数学', '语文', '生物']
+const subject = ref('数学')
 const graph = ref<GraphData>({ nodes: [], edges: [] })
 const stats = ref<{ connect_rate: number }>({ connect_rate: 0 })
 const detail = ref<any>(null)
+
+async function load() {
+  graph.value = await eduApi.getGraph(subject.value)
+  stats.value = await eduApi.getKnowledgeStats(subject.value)
+  detail.value = null
+}
 
 const connectRate = computed(() => stats.value.connect_rate ?? 0)
 
@@ -112,10 +125,7 @@ function onClick(params: any) {
   }
 }
 
-onMounted(async () => {
-  graph.value = await eduApi.getGraph('数学')
-  stats.value = await eduApi.getKnowledgeStats('数学')
-})
+onMounted(load)
 </script>
 
 <style scoped>
