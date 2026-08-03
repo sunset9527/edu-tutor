@@ -37,6 +37,7 @@ class KnowledgeGraphService:
                 db.query(KnowledgePoint)
                 .filter(
                     KnowledgePoint.subject == subject,
+                    KnowledgePoint.grade == grade,
                     KnowledgePoint.chapter == chapter,
                 )
                 .all()
