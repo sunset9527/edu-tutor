@@ -1,0 +1,18 @@
+"""SQLAlchemy 模型统一导出（alembic autogenerate 依赖此文件）"""
+from app.models.student import Student, StudentProfile
+from app.models.session import Session, Message
+from app.models.memory import Memory, MemoryConflict, ReviewPlan
+from app.models.knowledge import KnowledgePoint, KnowledgePointLink, WrongQuestion
+
+__all__ = [
+    "Student",
+    "StudentProfile",
+    "Session",
+    "Message",
+    "Memory",
+    "MemoryConflict",
+    "ReviewPlan",
+    "KnowledgePoint",
+    "KnowledgePointLink",
+    "WrongQuestion",
+]

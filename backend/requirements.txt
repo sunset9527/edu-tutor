@@ -1,0 +1,26 @@
+# Web 框架
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+
+# 数据库
+SQLAlchemy>=2.0.30
+PyMySQL>=1.1
+alembic>=1.13
+
+# LangChain / LangGraph（1.x 新版 API）
+langchain>=1.0
+langchain-openai>=1.0
+langgraph>=1.0
+langgraph-checkpoint>=2.0
+
+# 向量库（v0.2 记忆引擎用）
+chromadb>=0.5
+
+# 配置
+python-dotenv>=1.0
+
+# 测试
+pytest>=8.0
+httpx>=0.27

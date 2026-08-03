@@ -1,0 +1,130 @@
+{
+  "tp": 17,
+  "fp": 13,
+  "fn": 3,
+  "precision": 0.5667,
+  "recall": 0.85,
+  "f1": 0.68,
+  "per_sample": [
+    {
+      "id": 1,
+      "gold": 2,
+      "predicted": 1,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "id": 2,
+      "gold": 1,
+      "predicted": 1,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "id": 3,
+      "gold": 2,
+      "predicted": 2,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "id": 4,
+      "gold": 2,
+      "predicted": 2,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "id": 5,
+      "gold": 2,
+      "predicted": 2,
+      "tp": 1,
+      "fp": 1,
+      "fn": 1
+    },
+    {
+      "id": 6,
+      "gold": 0,
+      "predicted": 1,
+      "tp": 0,
+      "fp": 1,
+      "fn": 0
+    },
+    {
+      "id": 7,
+      "gold": 1,
+      "predicted": 4,
+      "tp": 1,
+      "fp": 2,
+      "fn": 0
+    },
+    {
+      "id": 8,
+      "gold": 1,
+      "predicted": 2,
+      "tp": 1,
+      "fp": 1,
+      "fn": 0
+    },
+    {
+      "id": 9,
+      "gold": 1,
+      "predicted": 3,
+      "tp": 1,
+      "fp": 2,
+      "fn": 0
+    },
+    {
+      "id": 10,
+      "gold": 2,
+      "predicted": 2,
+      "tp": 1,
+      "fp": 1,
+      "fn": 1
+    },
+    {
+      "id": 11,
+      "gold": 2,
+      "predicted": 2,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "id": 12,
+      "gold": 0,
+      "predicted": 0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "id": 13,
+      "gold": 1,
+      "predicted": 2,
+      "tp": 0,
+      "fp": 2,
+      "fn": 1
+    },
+    {
+      "id": 14,
+      "gold": 2,
+      "predicted": 3,
+      "tp": 2,
+      "fp": 1,
+      "fn": 0
+    },
+    {
+      "id": 15,
+      "gold": 1,
+      "predicted": 3,
+      "tp": 1,
+      "fp": 2,
+      "fn": 0
+    }
+  ]
+}

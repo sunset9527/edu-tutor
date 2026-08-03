@@ -1,0 +1,142 @@
+<template>
+  <div class="mem-page">
+    <el-card shadow="never" class="top-card">
+      <div class="row-between">
+        <div class="row-between" style="gap: 12px">
+          <el-select v-model="studentId" placeholder="选择学生" style="width: 200px" @change="load">
+            <el-option v-for="s in store.students" :key="s.id" :label="`${s.name}（${s.grade}）`" :value="s.id" />
+          </el-select>
+          <el-tag v-if="store.current" effect="plain" type="info">记忆 {{ memories.length }} 条</el-tag>
+        </div>
+        <span class="curve-tip">遗忘曲线：R = strength × e^(-λt)，λ=0.1</span>
+      </div>
+    </el-card>
+
+    <el-row :gutter="12" class="fill-row">
+      <el-col :span="10" class="fill-col">
+        <el-card shadow="never" class="fill-card">
+          <template #header>📉 记忆遗忘曲线（理论）</template>
+          <v-chart class="curve-chart" :option="curveOption" autoresize />
+          <p class="curve-desc">复习成功 → 强度上升 → 遗忘变慢（曲线上移）。</p>
+        </el-card>
+      </el-col>
+      <el-col :span="14" class="fill-col">
+        <el-card shadow="never" class="fill-card">
+          <template #header>
+            <div class="row-between">
+              <span>🧠 记忆库</span>
+              <el-radio-group v-model="filter" size="small">
+                <el-radio-button label="all">全部</el-radio-button>
+                <el-radio-button label="semantic">画像</el-radio-button>
+                <el-radio-button label="episodic">情景</el-radio-button>
+                <el-radio-button label="procedural">策略</el-radio-button>
+              </el-radio-group>
+            </div>
+          </template>
+          <el-scrollbar class="fill-scroll">
+            <div v-for="mem in filtered" :key="mem.id" class="mem-row">
+              <el-tag size="small" :type="typeColor(mem.memory_type)">{{ typeLabel(mem.memory_type) }}</el-tag>
+              <div class="mem-row-body">
+                <div class="mem-row-content">{{ mem.content }}</div>
+                <el-progress :percentage="Math.round(mem.strength * 100)" :stroke-width="6" :show-text="false" style="margin: 4px 0" />
+                <span class="mem-meta">强度 {{ mem.strength.toFixed(2) }} · 置信 {{ (mem.confidence * 100).toFixed(0) }}% · {{ mem.created_at?.slice(0, 10) }}</span>
+              </div>
+              <div class="mem-actions">
+                <el-button size="small" type="success" plain @click="review(mem, true)">复习✓</el-button>
+                <el-button size="small" type="danger" plain @click="review(mem, false)">遗忘</el-button>
+              </div>
+            </div>
+            <el-empty v-if="!filtered.length" description="暂无记忆" />
+          </el-scrollbar>
+        </el-card>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart } from 'echarts/charts'
+import { TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
+import VChart from 'vue-echarts'
+import { eduApi, type MemoryItem } from '../api/edu'
+import { useStudentStore } from '../stores/student'
+
+use([CanvasRenderer, LineChart, TooltipComponent, LegendComponent, GridComponent])
+
+const store = useStudentStore()
+const studentId = ref<number | null>(null)
+const memories = ref<MemoryItem[]>([])
+const filter = ref('all')
+
+const filtered = computed(() =>
+  filter.value === 'all' ? memories.value : memories.value.filter((m) => m.memory_type === filter.value)
+)
+
+const curveOption = computed(() => {
+  const days = Array.from({ length: 31 }, (_, i) => i)
+  const strengths = [0.3, 0.6, 0.83, 0.95]
+  const series = strengths.map((s) => ({
+    name: `strength=${s}`,
+    type: 'line',
+    smooth: true,
+    data: days.map((d) => Number((s * Math.exp(-0.1 * d)).toFixed(3))),
+  }))
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { bottom: 0 },
+    grid: { left: 40, right: 16, top: 20, bottom: 40 },
+    xAxis: { type: 'category', data: days, name: '天数' },
+    yAxis: { type: 'value', name: '保留率', max: 1 },
+    series,
+  }
+})
+
+function typeLabel(t: string) {
+  return t === 'semantic' ? '画像' : t === 'episodic' ? '情景' : '策略'
+}
+function typeColor(t: string) {
+  return t === 'semantic' ? 'success' : t === 'episodic' ? 'primary' : 'warning'
+}
+
+async function load() {
+  if (!studentId.value) return
+  memories.value = await eduApi.getMemories(studentId.value)
+}
+
+async function review(mem: MemoryItem, success: boolean) {
+  await eduApi.reviewMemory(mem.id, success)
+  ElMessage.success(success ? '复习成功，强度上升，间隔翻倍' : '已标记遗忘，强度减半')
+  await load()
+}
+
+onMounted(async () => {
+  await store.loadStudents()
+  if (store.students.length) {
+    studentId.value = store.students[0].id
+    await load()
+  }
+})
+</script>
+
+<style scoped>
+.mem-page { height: 100%; display: flex; flex-direction: column; }
+.top-card { flex-shrink: 0; margin-bottom: 12px; }
+.fill-row { flex: 1; min-height: 0; }
+.fill-col { height: 100%; }
+.fill-card { height: 100%; display: flex; flex-direction: column; }
+.fill-card :deep(.el-card__body) { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.fill-scroll { flex: 1; min-height: 0; }
+.row-between { display: flex; justify-content: space-between; align-items: center; }
+.curve-tip { color: #909399; font-size: 12px; }
+.curve-chart { flex: 1; min-height: 300px; }
+.curve-desc { color: #909399; font-size: 12px; margin-top: 8px; flex-shrink: 0; }
+.mem-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0f2f5; }
+.mem-row-body { flex: 1; min-width: 0; }
+.mem-row-content { font-size: 14px; color: #303133; word-break: break-word; }
+.mem-meta { font-size: 12px; color: #c0c4cc; }
+.mem-actions { display: flex; flex-direction: column; gap: 4px; }
+</style>

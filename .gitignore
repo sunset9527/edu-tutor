@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 环境配置（含密钥，绝不提交）
+.env
+
+# 数据目录（本地 Chroma/编译产物）
+data/
+*.db
+
+# 前端
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/

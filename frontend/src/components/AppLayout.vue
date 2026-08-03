@@ -1,0 +1,51 @@
+<template>
+  <el-container class="app-layout">
+    <el-aside width="220px" class="app-aside">
+      <div class="logo">🎓 EduTutor</div>
+      <el-menu :default-active="activeMenu" router class="app-menu">
+        <el-menu-item index="/chat">
+          <el-icon><ChatDotRound /></el-icon>
+          <span>辅导对话</span>
+        </el-menu-item>
+        <el-menu-item index="/students">
+          <el-icon><User /></el-icon>
+          <span>学生管理</span>
+        </el-menu-item>
+        <el-menu-item index="/memories">
+          <el-icon><Memo /></el-icon>
+          <span>记忆库</span>
+        </el-menu-item>
+        <el-menu-item index="/graph">
+          <el-icon><Share /></el-icon>
+          <span>知识图谱</span>
+        </el-menu-item>
+        <el-menu-item index="/report">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>学习报告</span>
+        </el-menu-item>
+      </el-menu>
+    </el-aside>
+    <el-main class="app-main">
+      <router-view />
+    </el-main>
+  </el-container>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { ChatDotRound, User, Memo, Share, DataAnalysis } from '@element-plus/icons-vue'
+
+const route = useRoute()
+const activeMenu = computed(() => '/' + (route.path.split('/')[1] || 'chat'))
+</script>
+
+<style scoped>
+.app-layout { height: 100%; }
+.app-aside { background: #fff; border-right: 1px solid #e4e7ed; }
+.logo { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: 700; color: #409eff; border-bottom: 1px solid #f0f2f5; }
+.app-menu { border-right: none; }
+/* 关键：main 变 flex 容器，子页面自动撑满剩余高度，消灭底部空白 */
+.app-main { background: #f5f7fa; padding: 16px; overflow: hidden; display: flex; flex-direction: column; }
+.app-main > * { flex: 1; min-height: 0; }
+</style>
