@@ -15,6 +15,7 @@ const router = createRouter({
         { path: 'memories', name: 'memories', component: () => import('../views/MemoryView.vue') },
         { path: 'graph', name: 'graph', component: () => import('../views/GraphView.vue') },
         { path: 'report', name: 'report', component: () => import('../views/ReportView.vue') },
+        { path: 'settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
       ],
     },
   ],

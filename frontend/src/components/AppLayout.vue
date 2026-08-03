@@ -23,6 +23,10 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>学习报告</span>
         </el-menu-item>
+        <el-menu-item index="/settings">
+          <el-icon><Setting /></el-icon>
+          <span>系统设置</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-main class="app-main">
@@ -34,7 +38,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { ChatDotRound, User, Memo, Share, DataAnalysis } from '@element-plus/icons-vue'
+import { ChatDotRound, User, Memo, Share, DataAnalysis, Setting } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 

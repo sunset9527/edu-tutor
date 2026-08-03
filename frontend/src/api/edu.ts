@@ -103,4 +103,14 @@ export const eduApi = {
     client.get('/knowledge/stats', { params: { subject } }).then((r) => r.data),
   getKnowledgeDetail: (id: number) =>
     client.get(`/knowledge/${id}`).then((r) => r.data),
+
+  // 参数后台（v1.1）
+  getSettings: () => client.get('/settings').then((r) => r.data),
+  updateSettings: (data: Record<string, number>) =>
+    client.put('/settings', data).then((r) => r.data),
+
+  // 记忆管理（v1.1）
+  updateMemory: (id: number, data: { content?: string; mastery?: string; status?: string }) =>
+    client.put(`/memories/${id}`, data).then((r) => r.data),
+  deleteMemory: (id: number) => client.delete(`/memories/${id}`).then((r) => r.data),
 }

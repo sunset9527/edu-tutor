@@ -66,3 +66,50 @@ def review_plans(student_id: int, db: Session = Depends(get_db)):
                 item["strength"] = round(memory.strength, 3)
         result.append(item)
     return result
+
+
+class MemoryUpdate(BaseModel):
+    content: str | None = None
+    mastery: str | None = None
+    status: str | None = None
+
+
+@router.put("/memories/{memory_id}")
+def update_memory(
+    memory_id: int, payload: MemoryUpdate, db: Session = Depends(get_db)
+):
+    """编辑记忆内容/掌握度/状态（人工纠错闭环）"""
+    memory = db.get(Memory, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="记忆不存在")
+    if payload.content is not None:
+        memory.content = payload.content
+    if payload.mastery is not None:
+        memory.mastery = payload.mastery
+    if payload.status is not None:
+        memory.status = payload.status
+        if payload.status == "archived":
+            try:
+                from app.services.memory.chroma_client import get_memory_collection
+                get_memory_collection().delete(ids=[str(memory.id)])
+            except Exception:
+                pass
+    db.commit()
+    return {"ok": True, "id": memory.id, "status": memory.status}
+
+
+@router.delete("/memories/{memory_id}")
+def delete_memory(memory_id: int, db: Session = Depends(get_db)):
+    """删除记忆（软删 archived + 清向量）"""
+    memory = db.get(Memory, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="记忆不存在")
+    memory.status = "archived"
+    db.commit()
+    try:
+        from app.services.memory.chroma_client import get_memory_collection
+        get_memory_collection().delete(ids=[str(memory.id)])
+    except Exception:
+        pass
+    return {"ok": True, "id": memory_id}
+

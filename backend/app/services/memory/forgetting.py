@@ -11,6 +11,7 @@ import math
 from datetime import datetime, timedelta
 
 from app.core.config import settings
+from app.services import settings_service
 from app.models.memory import Memory, ReviewPlan
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ def calculate_retention(
     strength: float, days: float, lambda_: float | None = None
 ) -> float:
     """记忆保留率 R = strength × e^(-λt)，∈ [0,1]"""
-    lam = lambda_ if lambda_ is not None else settings.decay_lambda
+    lam = lambda_ if lambda_ is not None else settings_service.get_float("decay_lambda", settings.decay_lambda)
     if days < 0:
         days = 0.0
     return max(0.0, min(1.0, strength * math.exp(-lam * days)))
@@ -59,7 +60,7 @@ class ReviewScheduler:
         interval_days: int | None = None,
     ) -> ReviewPlan:
         """为记忆/知识点创建复习计划（默认 1 天后首次复习）"""
-        interval = interval_days or settings.review_interval_base
+        interval = interval_days or settings_service.get_int("review_interval_base", settings.review_interval_base)
         plan = ReviewPlan(
             student_id=student_id,
             target_type=target_type,

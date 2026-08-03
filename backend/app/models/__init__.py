@@ -4,6 +4,7 @@ from app.models.user import User
 from app.models.session import Session, Message
 from app.models.memory import Memory, MemoryConflict, ReviewPlan
 from app.models.knowledge import KnowledgePoint, KnowledgePointLink, WrongQuestion
+from app.models.setting import SystemSetting
 
 __all__ = [
     "Student",
@@ -17,4 +18,5 @@ __all__ = [
     "KnowledgePoint",
     "KnowledgePointLink",
     "WrongQuestion",
+    "SystemSetting",
 ]

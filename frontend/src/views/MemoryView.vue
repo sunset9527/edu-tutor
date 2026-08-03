@@ -43,7 +43,9 @@
               </div>
               <div class="mem-actions">
                 <el-button size="small" type="success" plain @click="review(mem, true)">复习✓</el-button>
-                <el-button size="small" type="danger" plain @click="review(mem, false)">遗忘</el-button>
+                <el-button size="small" plain @click="review(mem, false)">遗忘</el-button>
+                <el-button size="small" type="primary" text @click="openEdit(mem)">编辑</el-button>
+                <el-button size="small" type="danger" text @click="remove(mem)">删除</el-button>
               </div>
             </div>
             <el-empty v-if="!filtered.length" description="暂无记忆" />
@@ -51,6 +53,13 @@
         </el-card>
       </el-col>
     </el-row>
+    <el-dialog v-model="editVisible" title="编辑记忆" width="480px">
+      <el-input v-model="editContent" type="textarea" :rows="4" />
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveEdit">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -105,6 +114,30 @@ function typeColor(t: string) {
 async function load() {
   if (!studentId.value) return
   memories.value = await eduApi.getMemories(studentId.value)
+}
+
+const editing = ref<MemoryItem | null>(null)
+const editContent = ref('')
+const editVisible = ref(false)
+
+function openEdit(mem: MemoryItem) {
+  editing.value = mem
+  editContent.value = mem.content
+  editVisible.value = true
+}
+
+async function saveEdit() {
+  if (!editing.value) return
+  await eduApi.updateMemory(editing.value.id, { content: editContent.value })
+  editVisible.value = false
+  ElMessage.success('记忆已更新')
+  await load()
+}
+
+async function remove(mem: MemoryItem) {
+  await eduApi.deleteMemory(mem.id)
+  ElMessage.success('记忆已删除（归档）')
+  await load()
 }
 
 async function review(mem: MemoryItem, success: boolean) {
