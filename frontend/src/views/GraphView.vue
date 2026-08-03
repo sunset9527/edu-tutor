@@ -55,6 +55,20 @@ const subject = ref('数学')
 const graph = ref<GraphData>({ nodes: [], edges: [] })
 const stats = ref<{ connect_rate: number }>({ connect_rate: 0 })
 const detail = ref<any>(null)
+const learningPath = ref<any[]>([])
+const pathLoading = ref(false)
+
+async function showPath(kpId: number) {
+  pathLoading.value = true
+  try {
+    const r = await eduApi.getLearningPath(kpId)
+    learningPath.value = r.path
+  } catch (e) {
+    learningPath.value = []
+  } finally {
+    pathLoading.value = false
+  }
+}
 
 async function load() {
   graph.value = await eduApi.getGraph(subject.value)
@@ -136,6 +150,11 @@ onMounted(load)
 .fill-card :deep(.el-card__body) { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
 .row-between { display: flex; justify-content: space-between; align-items: center; }
 .graph-chart { flex: 1; min-height: 400px; }
+.path-box { margin-top: 10px; background: #f8fafc; border-radius: 6px; padding: 10px; }
+.path-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.path-step { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 13px; }
+.path-step.target { color: #f56c6c; font-weight: 600; }
+.path-num { width: 18px; height: 18px; border-radius: 50%; background: #409eff; color: #fff; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .legend-tip { margin-top: 8px; flex-shrink: 0; }
 .detail-scroll { overflow-y: auto; }
 .detail-title { font-size: 16px; margin-bottom: 6px; }

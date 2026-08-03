@@ -34,3 +34,19 @@ def knowledge_detail(kp_id: int, db: Session = Depends(get_db)):
         "difficulty": kp.difficulty,
         "content_md": kp.content_md,
     }
+
+
+@router.get("/path/{kp_id}")
+def learning_path(kp_id: int, db: Session = Depends(get_db)):
+    """个性化学习路径：目标知识点的前置知识链（v1.3）"""
+    from app.services.knowledge.path_service import build_learning_path
+
+    target = db.get(KnowledgePoint, kp_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="知识点不存在")
+    path = build_learning_path(db, kp_id)
+    return {
+        "target": {"id": target.id, "title": target.title, "subject": target.subject},
+        "path": path,
+    }
+

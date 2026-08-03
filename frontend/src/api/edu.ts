@@ -103,6 +103,7 @@ export const eduApi = {
     client.get('/knowledge/stats', { params: { subject } }).then((r) => r.data),
   getKnowledgeDetail: (id: number) =>
     client.get(`/knowledge/${id}`).then((r) => r.data),
+  getLearningPath: (id: number) => client.get(`/knowledge/path/${id}`).then((r) => r.data),
 
   // 参数后台（v1.1）
   getSettings: () => client.get('/settings').then((r) => r.data),
