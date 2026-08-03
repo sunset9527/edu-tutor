@@ -74,10 +74,15 @@ def build_one(pdf: Path, subject: str, ocr: bool, limit: int) -> int:
 
     print(f"\n>>> 开始编译: {pdf.name} ({subject}/{grade})")
     t0 = time.time()
-    pages = extract_text_by_pages(str(pdf), use_ocr=ocr)
-    print(f"  [1] 提取 {len(pages)} 页文本")
-    if not pages:
-        print("  !! 无文本（图片版且未启用 OCR），跳过")
+    pages = extract_text_by_pages(str(pdf), use_ocr=False)
+    total_text = sum(len(p.get("text", "")) for p in pages)
+    if total_text < 500 and ocr:
+        print(f"  [1] 文本不足（{total_text} 字），启用 OCR 重试...")
+        pages = extract_text_by_pages(str(pdf), use_ocr=True)
+        total_text = sum(len(p.get("text", "")) for p in pages)
+    print(f"  [1] 提取 {len(pages)} 页文本（{total_text} 字）")
+    if total_text < 500:
+        print("  !! 无文本（图片版且未启用 OCR 或 OCR 失败），跳过")
         return 0
 
     blocks = group_pages(pages, 12)
