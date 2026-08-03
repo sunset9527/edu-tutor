@@ -24,9 +24,10 @@ def main() -> None:
     parser.add_argument("--grade", default="初一")
     parser.add_argument("--group", type=int, default=12, help="每块页数（约一章内容）")
     parser.add_argument("--limit", type=int, default=0, help="只编译前 N 块（0=全部，调试用）")
+    parser.add_argument("--ocr", action="store_true", help="图片版 PDF 启用 OCR（较慢）")
     args = parser.parse_args()
 
-    pages = extract_text_by_pages(args.pdf)
+    pages = extract_text_by_pages(args.pdf, use_ocr=args.ocr)
     print(f"[1] 提取 {len(pages)} 页文本")
 
     blocks = group_pages(pages, args.group)

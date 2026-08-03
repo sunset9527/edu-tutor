@@ -6,7 +6,17 @@ import fitz
 logger = logging.getLogger(__name__)
 
 
-def extract_text_by_pages(pdf_path: str) -> list[dict]:
+def extract_text_by_pages(pdf_path: str, use_ocr: bool = False) -> list[dict]:
+    """逐页提取文本；图片版 PDF 且 use_ocr=True 时逐页 OCR"""
+    if use_ocr:
+        from app.services.knowledge.ocr import ocr_pdf
+
+        ocr_pages = ocr_pdf(pdf_path)
+        return [
+            {"page": i + 1, "text": t}
+            for i, t in enumerate(ocr_pages)
+            if t.strip()
+        ]
     """提取每页文本，返回 [{page, text}]（跳过空页）"""
     doc = fitz.open(pdf_path)
     pages = []
