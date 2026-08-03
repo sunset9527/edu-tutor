@@ -15,8 +15,8 @@ from app.services.knowledge.chroma_client import get_knowledge_collection
 logger = logging.getLogger(__name__)
 
 
-def _slug(title: str, chapter: str) -> str:
-    h = hashlib.md5(f"{chapter}:{title}".encode("utf-8")).hexdigest()[:6]
+def _slug(subject: str, grade: str, title: str, chapter: str) -> str:
+    h = hashlib.md5(f"{subject}:{grade}:{chapter}:{title}".encode("utf-8")).hexdigest()[:6]
     return f"{title}-{h}"
 
 
@@ -71,7 +71,7 @@ class KnowledgeGraphService:
                     grade=grade,
                     chapter=chapter,
                     title=p["title"],
-                    slug=_slug(p["title"], chapter),
+                    slug=_slug(subject, grade, p["title"], chapter),
                     content_md=p["content_md"],
                     difficulty=p.get("difficulty", "基础"),
                 )
