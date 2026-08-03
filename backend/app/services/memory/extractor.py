@@ -32,6 +32,21 @@ EXTRACT_SYSTEM_PROMPT = """你是一名学生记忆提取器。从辅导对话�
 6. object 要具体、可读（如"解方程中的移项"而不是"数学问题"）"""
 
 
+FILTER_PROMPT = """你是记忆质量校验器。以下是 LLM 从辅导对话中提取的候选学生记忆：
+{candidates}
+
+对话记录：
+学生：{user_message}
+老师：{ai_response}
+
+只删除「明确属于教学内容」的候选：老师单方面讲解的解题步骤、公式、通用方法，且对话中完全没有学生认可、采用或回应的信号。
+保留所有其他候选（学生的薄弱点、掌握情况、偏好、错题、学生认可的方法、学习进展）。
+
+注意：如果不确定是否属于教学内容，请保留它——宁可多留，不可误删学生的真实状态。
+
+只输出过滤后的 JSON 数组（保持原格式），没有保留的输出 []。"""
+
+
 class MemoryExtractor:
     def __init__(self):
         self.llm = create_llm(temperature=0.0)
@@ -41,8 +56,9 @@ class MemoryExtractor:
         user_message: str,
         ai_response: str,
         profile_summary: str = "",
+        enable_filter: bool = True,
     ) -> list[dict]:
-        """从一轮对话中提取记忆项"""
+        """从一轮对话中提取记忆项（可选二次校验，过滤教学内容）"""
         prompt = EXTRACT_SYSTEM_PROMPT.format(
             profile_summary=profile_summary or "（无）",
             user_message=user_message,
@@ -50,10 +66,29 @@ class MemoryExtractor:
         )
         try:
             resp = self.llm.invoke(prompt)
-            return self._parse(resp.content)
+            items = self._parse(resp.content)
+            if items and enable_filter:
+                items = self._filter(user_message, ai_response, items)
+            return items
         except Exception as e:  # noqa: BLE001
             logger.warning(f"记忆提取失败: {e}")
             return []
+
+    def _filter(self, user_message: str, ai_response: str, items: list[dict]) -> list[dict]:
+        """二次校验：删除教学内容类候选，保留学生长期状态"""
+        import json as _json
+
+        prompt = FILTER_PROMPT.format(
+            user_message=user_message,
+            ai_response=ai_response,
+            candidates=_json.dumps(items, ensure_ascii=False),
+        )
+        try:
+            resp = self.llm.invoke(prompt)
+            return self._parse(resp.content)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"记忆过滤失败，保留原结果: {e}")
+            return items
 
     def _parse(self, content: str) -> list[dict]:
         """解析 LLM 输出为 JSON 列表（容错处理）"""
