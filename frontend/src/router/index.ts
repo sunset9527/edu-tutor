@@ -11,6 +11,7 @@ const router = createRouter({
       children: [
         { path: '', redirect: '/chat' },
         { path: 'chat', name: 'chat', component: () => import('../views/ChatView.vue') },
+        { path: 'quiz', name: 'quiz', component: () => import('../views/QuizView.vue') },
         { path: 'students', name: 'students', component: () => import('../views/StudentView.vue') },
         { path: 'memories', name: 'memories', component: () => import('../views/MemoryView.vue') },
         { path: 'graph', name: 'graph', component: () => import('../views/GraphView.vue') },

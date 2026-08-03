@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api import auth, chat, knowledge, memories, settings_api, students
+from app.api import auth, chat, knowledge, memories, quiz, settings_api, students
 from app.core.database import engine
 
 app = FastAPI(
@@ -26,6 +26,7 @@ app.include_router(chat.router)
 app.include_router(memories.router)
 app.include_router(knowledge.router)
 app.include_router(settings_api.router)
+app.include_router(quiz.router)
 
 
 @app.get("/health")

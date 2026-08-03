@@ -1,5 +1,31 @@
 <template>
   <div class="report-page">
+    <el-row :gutter="12" style="margin-bottom: 12px" v-if="report">
+      <el-col :span="6">
+        <el-card shadow="never" class="stat-card">
+          <div class="stat-num">{{ report.memory_total }}</div>
+          <div class="stat-label">记忆条数</div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="never" class="stat-card">
+          <div class="stat-num">{{ report.review.done }}/{{ report.review.total }}</div>
+          <div class="stat-label">复习完成</div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="never" class="stat-card">
+          <div class="stat-num">{{ report.wrong_questions.total }}</div>
+          <div class="stat-label">错题总数</div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="never" class="stat-card">
+          <div class="stat-num">{{ report.review.due }}</div>
+          <div class="stat-label">待复习</div>
+        </el-card>
+      </el-col>
+    </el-row>
     <el-card shadow="never" style="margin-bottom: 12px">
       <div class="row-between">
         <el-select v-model="studentId" placeholder="选择学生" style="width: 200px" @change="load">
@@ -62,6 +88,7 @@ const wrongs = ref<WrongQuestion[]>([])
 const profile = ref<StudentProfile | null>(null)
 
 async function load() {
+  await loadReport()
   if (!studentId.value) return
   ;[plans.value, wrongs.value, profile.value] = await Promise.all([
     eduApi.getReviewPlans(studentId.value),

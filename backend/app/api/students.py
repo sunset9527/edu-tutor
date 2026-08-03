@@ -111,3 +111,48 @@ def student_wrong_questions(student_id: int, db: Session = Depends(get_db)):
         }
         for w in rows
     ]
+
+
+@router.get("/{student_id}/report")
+def student_report(student_id: int, db: Session = Depends(get_db)):
+    """学习报告汇总（v1.2）：记忆/复习/错题/画像"""
+    from app.models.knowledge import WrongQuestion
+    from app.models.memory import Memory, ReviewPlan
+    from app.models.student import StudentProfile
+
+    student = db.get(Student, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="学生不存在")
+
+    memories = db.query(Memory).filter(
+        Memory.student_id == student_id, Memory.status == "active"
+    ).all()
+    type_counts: dict[str, int] = {}
+    for m in memories:
+        type_counts[m.memory_type] = type_counts.get(m.memory_type, 0) + 1
+
+    plans = db.query(ReviewPlan).filter(ReviewPlan.student_id == student_id).all()
+    due_plans = [p for p in plans if p.status == "pending"]
+
+    wqs = db.query(WrongQuestion).filter(WrongQuestion.student_id == student_id).all()
+
+    profile = db.get(StudentProfile, student_id)
+
+    return {
+        "student": {"id": student.id, "name": student.name, "grade": student.grade, "subject": student.subject},
+        "memory_counts": type_counts,
+        "memory_total": len(memories),
+        "review": {
+            "total": len(plans),
+            "due": len(due_plans),
+            "done": len(plans) - len(due_plans),
+        },
+        "wrong_questions": {
+            "total": len(wqs),
+            "mastered": sum(1 for w in wqs if w.mastered),
+            "unmastered": sum(1 for w in wqs if not w.mastered),
+        },
+        "weaknesses": profile.weaknesses if profile else [],
+        "strengths": profile.strengths if profile else [],
+    }
+

@@ -7,6 +7,10 @@
           <el-icon><ChatDotRound /></el-icon>
           <span>辅导对话</span>
         </el-menu-item>
+        <el-menu-item index="/quiz">
+          <el-icon><EditPen /></el-icon>
+          <span>智能出题</span>
+        </el-menu-item>
         <el-menu-item index="/students">
           <el-icon><User /></el-icon>
           <span>学生管理</span>
@@ -38,7 +42,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { ChatDotRound, User, Memo, Share, DataAnalysis, Setting } from '@element-plus/icons-vue'
+import { ChatDotRound, User, Memo, Share, DataAnalysis, Setting, EditPen } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
