@@ -74,7 +74,7 @@ export interface WrongQuestion {
 
 export const eduApi = {
   // 学生
-  listStudents: () => client.get<Student[]>('/students').then((r) => r.data),
+  listStudents: (user_id?: number) => client.get<Student[]>('/students', { params: { user_id } }).then((r) => r.data),
   createStudent: (data: Partial<Student>) =>
     client.post<Student>('/students', data).then((r) => r.data),
   getProfile: (sid: number) =>

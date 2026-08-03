@@ -14,6 +14,8 @@ class Student(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False, comment="学生姓名")
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=True, comment="所属用户(v1.1)")
+
     grade: Mapped[str] = mapped_column(String(20), nullable=False, comment="年级：初一/初二/初三…")
     subject: Mapped[str] = mapped_column(String(20), default="数学", comment="主科目")
     level: Mapped[str] = mapped_column(String(20), default="基础", comment="水平：入门/基础/中等/进阶")

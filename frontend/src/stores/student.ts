@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { eduApi, type Student } from '../api/edu'
+import { useAuthStore } from './auth'
 
 export const useStudentStore = defineStore('student', () => {
   const students = ref<Student[]>([])
@@ -8,7 +9,9 @@ export const useStudentStore = defineStore('student', () => {
   const sessionId = ref<number | null>(null)
 
   async function loadStudents() {
-    students.value = await eduApi.listStudents()
+    const auth = useAuthStore()
+    // 登录用户只看到自己的学生；未登录（演示）看全部
+    students.value = await eduApi.listStudents(auth.user?.id)
     if (!current.value && students.value.length > 0) {
       current.value = students.value[0]
     }

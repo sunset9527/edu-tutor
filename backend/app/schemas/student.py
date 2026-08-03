@@ -19,3 +19,4 @@ class StudentOut(BaseModel):
     subject: str
     level: str
     prefer_style: str | None = None
+    user_id: int | None = None

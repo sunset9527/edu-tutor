@@ -1,4 +1,4 @@
-"""学生相关路由（v0.4 扩展：画像/记忆列表/错题本）"""
+"""学生相关路由（v1.1：账号关联 + 按用户过滤）"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -6,14 +6,21 @@ from app.core.database import get_db
 from app.models.knowledge import WrongQuestion
 from app.models.memory import Memory
 from app.models.student import Student, StudentProfile
+from app.api.auth import get_current_user_id
 from app.schemas.student import StudentCreate, StudentOut
 
 router = APIRouter(prefix="/api/students", tags=["students"])
 
 
 @router.post("", response_model=StudentOut, status_code=201)
-def create_student(payload: StudentCreate, db: Session = Depends(get_db)):
-    student = Student(**payload.model_dump())
+def create_student(
+    payload: StudentCreate,
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    data = payload.model_dump()
+    data["user_id"] = user_id
+    student = Student(**data)
     db.add(student)
     db.commit()
     db.refresh(student)
@@ -21,8 +28,15 @@ def create_student(payload: StudentCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=list[StudentOut])
-def list_students(db: Session = Depends(get_db)):
-    return db.query(Student).order_by(Student.id).all()
+def list_students(
+    user_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """学生列表（?user_id=N 按用户过滤；不带则返回全部，兼容演示）"""
+    query = db.query(Student)
+    if user_id is not None:
+        query = query.filter(Student.user_id == user_id)
+    return query.order_by(Student.id).all()
 
 
 @router.get("/{student_id}", response_model=StudentOut)

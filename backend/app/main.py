@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api import chat, knowledge, memories, students
+from app.api import auth, chat, knowledge, memories, students
 from app.core.database import engine
 
 app = FastAPI(
@@ -20,6 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(students.router)
 app.include_router(chat.router)
 app.include_router(memories.router)

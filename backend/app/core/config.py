@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     mysql_password: str = "123456"
     mysql_db: str = "edu_tutor"
 
+    # ---- 安全（v1.1）----
+    secret_key: str = "edututor-dev-secret-change-me"
+
     # ---- DeepSeek ----
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
