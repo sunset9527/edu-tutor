@@ -78,19 +78,26 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { eduApi, type ReviewPlan, type WrongQuestion, type StudentProfile } from '../api/edu'
+import {
+  eduApi,
+  type ReviewPlan,
+  type StudentReport,
+  type WrongQuestion,
+  type StudentProfile,
+} from '../api/edu'
 import { useStudentStore } from '../stores/student'
 
 const store = useStudentStore()
 const studentId = ref<number | null>(null)
+const report = ref<StudentReport | null>(null)
 const plans = ref<ReviewPlan[]>([])
 const wrongs = ref<WrongQuestion[]>([])
 const profile = ref<StudentProfile | null>(null)
 
 async function load() {
-  await loadReport()
   if (!studentId.value) return
-  ;[plans.value, wrongs.value, profile.value] = await Promise.all([
+  ;[report.value, plans.value, wrongs.value, profile.value] = await Promise.all([
+    eduApi.getReport(studentId.value),
     eduApi.getReviewPlans(studentId.value),
     eduApi.getWrongQuestions(studentId.value),
     eduApi.getProfile(studentId.value),

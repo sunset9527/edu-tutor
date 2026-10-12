@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.api.access import get_owned_student, get_owned_wrong_question
+from app.api.auth import require_current_user_id
 from app.core.database import get_db
 from app.core.llm import create_llm
 from app.models.knowledge import KnowledgePoint, WrongQuestion
@@ -79,8 +81,13 @@ def _parse_questions(raw: str) -> list[dict]:
 
 
 @router.post("/quiz/generate")
-def generate_quiz(payload: QuizRequest, db: Session = Depends(get_db)):
+def generate_quiz(
+    payload: QuizRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_current_user_id),
+):
     """智能出题：薄弱点知识点优先，LLM 生成题目"""
+    get_owned_student(db, payload.student_id, user_id)
     kps = _pick_knowledge_points(db, payload.student_id, payload.subject, n=3)
     if not kps:
         raise HTTPException(status_code=404, detail="该科目暂无知识点")
@@ -109,8 +116,13 @@ def generate_quiz(payload: QuizRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/wrong-questions", status_code=201)
-def record_wrong_question(payload: WrongQuestionCreate, db: Session = Depends(get_db)):
+def record_wrong_question(
+    payload: WrongQuestionCreate,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_current_user_id),
+):
     """记录错题（智能出题做错 → 入错题本）"""
+    get_owned_student(db, payload.student_id, user_id)
     wq = WrongQuestion(
         student_id=payload.student_id,
         knowledge_point_id=payload.knowledge_point_id,
@@ -127,11 +139,13 @@ def record_wrong_question(payload: WrongQuestionCreate, db: Session = Depends(ge
 
 
 @router.put("/wrong-questions/{wq_id}/mastered")
-def mark_wrong_mastered(wq_id: int, db: Session = Depends(get_db)):
+def mark_wrong_mastered(
+    wq_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_current_user_id),
+):
     """标记错题已掌握"""
-    wq = db.get(WrongQuestion, wq_id)
-    if not wq:
-        raise HTTPException(status_code=404, detail="错题不存在")
+    wq = get_owned_wrong_question(db, wq_id, user_id)
     wq.mastered = 1
     db.commit()
     return {"ok": True, "id": wq_id, "mastered": 1}

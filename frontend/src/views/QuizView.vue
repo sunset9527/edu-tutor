@@ -9,7 +9,7 @@
       </template>
 
       <div class="quiz-options">
-        <el-select v-model="studentId" placeholder="选择学生" style="width: 160px" @change="loadReport">
+        <el-select v-model="studentId" placeholder="选择学生" style="width: 160px">
           <el-option v-for="s in studentStore.students" :key="s.id" :label="s.name" :value="s.id" />
         </el-select>
         <el-select v-model="subject" style="width: 110px">
@@ -96,6 +96,7 @@ function showAnswer(q: any) {
 }
 
 async function wrong(q: any) {
+  if (!studentId.value) return
   await eduApi.recordWrongQuestion({
     student_id: studentId.value,
     question_text: q.question,

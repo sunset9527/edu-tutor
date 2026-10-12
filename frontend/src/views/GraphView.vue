@@ -31,6 +31,27 @@
             <h3 class="detail-title">{{ detail.title }}</h3>
             <el-tag size="small" :type="difficultyType(detail.difficulty)" style="margin-bottom: 8px">{{ detail.difficulty }}</el-tag>
             <div class="detail-chapter">{{ detail.chapter }}</div>
+            <el-button
+              type="primary"
+              plain
+              size="small"
+              :loading="pathLoading"
+              @click="showPath(detail.id)"
+            >
+              查看前置学习路径
+            </el-button>
+            <div v-if="learningPath.length" class="path-box">
+              <div class="path-title">建议学习顺序</div>
+              <div
+                v-for="(step, index) in learningPath"
+                :key="step.id"
+                class="path-step"
+                :class="{ target: step.id === detail.id }"
+              >
+                <span class="path-num">{{ index + 1 }}</span>
+                <span>{{ step.title }}</span>
+              </div>
+            </div>
             <div class="detail-md" v-html="mdToHtml(detail.content_md)"></div>
           </div>
         </el-card>
@@ -74,6 +95,7 @@ async function load() {
   graph.value = await eduApi.getGraph(subject.value)
   stats.value = await eduApi.getKnowledgeStats(subject.value)
   detail.value = null
+  learningPath.value = []
 }
 
 const connectRate = computed(() => stats.value.connect_rate ?? 0)
@@ -135,6 +157,7 @@ function mdToHtml(s: string) {
 
 function onClick(params: any) {
   if (params?.dataType === 'node') {
+    learningPath.value = []
     eduApi.getKnowledgeDetail(params.data.id).then((d) => (detail.value = d))
   }
 }

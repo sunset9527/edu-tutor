@@ -93,7 +93,7 @@ class MemoryRetriever:
             docs = (hits.get("documents") or [[]])[0] or []
             ids = (hits.get("ids") or [[]])[0] or []
 
-            # 遗忘加权：weight = retention(strength, last_reviewed_at)
+            # 遗忘加权：未复习记忆从创建时间开始衰减。
             scored: list[tuple[float, str]] = []
             db = SessionLocal()
             try:
@@ -103,7 +103,9 @@ class MemoryRetriever:
                         memory = db.get(Memory, int(mem_id))
                         if memory:
                             weight = retention_weight(
-                                memory.strength, memory.last_reviewed_at
+                                memory.strength,
+                                memory.last_reviewed_at,
+                                created_at=memory.created_at,
                             )
                     except (TypeError, ValueError):
                         pass

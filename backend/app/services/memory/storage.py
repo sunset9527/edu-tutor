@@ -11,9 +11,69 @@ from app.core.database import SessionLocal
 from app.core.embeddings import embed_texts
 from app.models.memory import Memory, MemoryConflict
 from app.models.student import StudentProfile
+from app.services import settings_service
 from app.services.memory.chroma_client import get_memory_collection
 
 logger = logging.getLogger(__name__)
+
+SINGLE_VALUE_PREDICATES = {"年级", "学习偏好"}
+OPPOSITE_PREDICATE_PAIRS = {frozenset({"薄弱点", "已掌握"})}
+
+
+def is_memory_candidate_accepted(confidence: float, minimum: float) -> bool:
+    """置信度达到配置阈值才允许写入。"""
+    return confidence >= minimum
+
+
+def facts_conflict(
+    existing: dict,
+    incoming: dict,
+    *,
+    explicit_conflict: bool = False,
+) -> bool:
+    """判断两个结构化事实是否占用同一且互斥的事实槽位。"""
+    old_predicate = str(existing.get("predicate") or "")
+    new_predicate = str(incoming.get("predicate") or "")
+    old_object = str(existing.get("object") or "")
+    new_object = str(incoming.get("object") or "")
+    if old_predicate == new_predicate:
+        if old_object == new_object:
+            return False
+        return old_predicate in SINGLE_VALUE_PREDICATES or explicit_conflict
+
+    old_kp = existing.get("knowledge_point_id")
+    new_kp = incoming.get("knowledge_point_id")
+    predicates = frozenset({old_predicate, new_predicate})
+    return bool(old_kp and new_kp and old_kp == new_kp and predicates in OPPOSITE_PREDICATE_PAIRS)
+
+
+def upsert_memory_vector(
+    memory: Memory,
+    *,
+    collection=None,
+    embedder=embed_texts,
+) -> None:
+    """按记忆当前内容幂等写入 Chroma。"""
+    collection = collection or get_memory_collection()
+    structured = memory.structured_data or {}
+    collection.upsert(
+        ids=[str(memory.id)],
+        embeddings=[embedder([memory.content])[0]],
+        metadatas=[
+            {
+                "student_id": memory.student_id,
+                "memory_type": memory.memory_type,
+                "predicate": str(structured.get("predicate") or "信息"),
+            }
+        ],
+        documents=[memory.content],
+    )
+
+
+def delete_memory_vector(memory_id: int, *, collection=None) -> None:
+    """从 Chroma 删除指定记忆向量。"""
+    collection = collection or get_memory_collection()
+    collection.delete(ids=[str(memory_id)])
 
 
 class MemoryStorage:
@@ -28,6 +88,8 @@ class MemoryStorage:
         if not items:
             return 0
         db = SessionLocal()
+        written_vector_ids: list[int] = []
+        removed_conflict_memories: list[Memory] = []
         try:
             count = 0
             for item in items:
@@ -37,39 +99,53 @@ class MemoryStorage:
                 confidence = min(1.0, max(0.0, float(item.get("confidence", 0.7))))
                 conflict_flag = bool(item.get("conflict", False))
 
-                # 冲突检测：同 predicate 已有不同内容的 active 记忆
-                if conflict_flag or self._has_conflict(db, student_id, predicate, obj):
-                    self._resolve_conflict(db, student_id, predicate, obj)
+                minimum_confidence = settings_service.get_float(
+                    "extract_min_confidence", 0.5
+                )
+                if not is_memory_candidate_accepted(confidence, minimum_confidence):
+                    logger.info(
+                        "跳过低置信度记忆: confidence=%.3f threshold=%.3f",
+                        confidence,
+                        minimum_confidence,
+                    )
+                    continue
+
+                incoming_fact = {
+                    "predicate": predicate,
+                    "object": obj,
+                    "knowledge_point_id": item.get("knowledge_point_id"),
+                }
+
+                if self._has_conflict(
+                    db,
+                    student_id,
+                    incoming_fact,
+                    explicit_conflict=conflict_flag,
+                ):
+                    conflicts = self._resolve_conflict(
+                        db,
+                        student_id,
+                        incoming_fact,
+                        explicit_conflict=conflict_flag,
+                    )
+                    for old_memory in conflicts:
+                        delete_memory_vector(old_memory.id, collection=self.collection)
+                        removed_conflict_memories.append(old_memory)
 
                 content = f"{predicate}：{obj}"
                 memory = Memory(
                     student_id=student_id,
                     memory_type=mtype,
                     content=content,
-                    structured_data={"predicate": predicate, "object": obj},
+                    structured_data=incoming_fact,
                     source_session_id=session_id,
                     confidence=confidence,
                 )
                 db.add(memory)
                 db.flush()  # 获取 memory.id
 
-                # Chroma 双写（BGE-M3 向量）
-                try:
-                    emb = embed_texts([content])[0]
-                    self.collection.add(
-                        ids=[str(memory.id)],
-                        embeddings=[emb],
-                        metadatas=[
-                            {
-                                "student_id": student_id,
-                                "memory_type": mtype,
-                                "predicate": predicate,
-                            }
-                        ],
-                        documents=[content],
-                    )
-                except Exception as e:  # noqa: BLE001
-                    logger.error(f"Chroma 写入失败（记忆 {memory.id} 仍保留在 MySQL）: {e}")
+                upsert_memory_vector(memory, collection=self.collection)
+                written_vector_ids.append(memory.id)
 
                 # 复习计划（遗忘曲线调度，v0.3）
                 from app.services.memory.forgetting import ReviewScheduler
@@ -81,15 +157,35 @@ class MemoryStorage:
 
                 count += 1
 
-            db.commit()
             self._refresh_profile(db, student_id)
+            db.commit()
             logger.info(f"记忆写入完成: 学生{student_id} 新增{count}条")
             return count
+        except Exception:
+            db.rollback()
+            for memory_id in written_vector_ids:
+                try:
+                    delete_memory_vector(memory_id, collection=self.collection)
+                except Exception as cleanup_error:  # noqa: BLE001
+                    logger.error("回滚记忆向量失败 id=%s: %s", memory_id, cleanup_error)
+            for old_memory in removed_conflict_memories:
+                try:
+                    upsert_memory_vector(old_memory, collection=self.collection)
+                except Exception as cleanup_error:  # noqa: BLE001
+                    logger.error("恢复冲突记忆向量失败 id=%s: %s", old_memory.id, cleanup_error)
+            raise
         finally:
             db.close()
 
-    def _has_conflict(self, db, student_id: int, predicate: str, obj: str) -> bool:
-        """同 predicate 已有不同内容 -> 冲突"""
+    def _has_conflict(
+        self,
+        db,
+        student_id: int,
+        incoming: dict,
+        *,
+        explicit_conflict: bool = False,
+    ) -> bool:
+        """存在占用同一互斥事实槽位的 active 记忆。"""
         rows = (
             db.query(Memory)
             .filter(
@@ -100,12 +196,24 @@ class MemoryStorage:
             .all()
         )
         for m in rows:
-            sd = m.structured_data or {}
-            if sd.get("predicate") == predicate and sd.get("object") != obj:
+            existing = dict(m.structured_data or {})
+            existing["knowledge_point_id"] = m.knowledge_point_id
+            if facts_conflict(
+                existing,
+                incoming,
+                explicit_conflict=explicit_conflict,
+            ):
                 return True
         return False
 
-    def _resolve_conflict(self, db, student_id: int, predicate: str, obj: str) -> None:
+    def _resolve_conflict(
+        self,
+        db,
+        student_id: int,
+        incoming: dict,
+        *,
+        explicit_conflict: bool = False,
+    ) -> list[Memory]:
         """旧记忆标 contradicted + 记录冲突"""
         rows = (
             db.query(Memory)
@@ -116,17 +224,25 @@ class MemoryStorage:
             )
             .all()
         )
+        conflicts: list[Memory] = []
         for m in rows:
-            sd = m.structured_data or {}
-            if sd.get("predicate") == predicate and sd.get("object") != obj:
+            existing = dict(m.structured_data or {})
+            existing["knowledge_point_id"] = m.knowledge_point_id
+            if facts_conflict(
+                existing,
+                incoming,
+                explicit_conflict=explicit_conflict,
+            ):
                 m.status = "contradicted"
+                conflicts.append(m)
                 db.add(
                     MemoryConflict(
                         student_id=student_id,
                         old_memory_id=m.id,
-                        new_content=f"{predicate}：{obj}",
+                        new_content=f"{incoming.get('predicate')}：{incoming.get('object')}",
                     )
                 )
+        return conflicts
 
     def _link_knowledge_point(self, db, memory: Memory) -> None:
         """双引擎桥：向量检索最相似知识点，填 knowledge_point_id（相似度阈值）"""
@@ -174,4 +290,3 @@ class MemoryStorage:
             db.add(profile)
         profile.weaknesses = weaknesses
         profile.strengths = strengths
-        db.commit()  # 画像快照落库（write 的 commit 在此之前）

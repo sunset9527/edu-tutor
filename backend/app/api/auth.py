@@ -66,3 +66,13 @@ def get_current_user_id(
     if not credentials:
         return None
     return decode_token(credentials.credentials)
+
+
+def require_current_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+) -> int:
+    """要求有效登录态；缺少或无效 token 均返回 401。"""
+    user_id = decode_token(credentials.credentials) if credentials else None
+    if not user_id:
+        raise HTTPException(status_code=401, detail="未登录或登录已失效")
+    return user_id

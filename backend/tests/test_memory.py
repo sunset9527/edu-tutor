@@ -89,8 +89,8 @@ def test_profile_updated():
         db.close()
 
 
-def test_conflict_resolution():
-    """同一 predicate 新内容不同 → 旧记忆标 contradicted + 冲突记录"""
+def test_multiple_weaknesses_can_coexist():
+    """薄弱点是多值事实，不同知识点必须同时保留。"""
     db = SessionLocal()
     try:
         student_id = _create_student(db)
@@ -117,7 +117,7 @@ def test_conflict_resolution():
             )
             .all()
         )
-        assert len(active) == 1, f"应只剩 1 条 active，实际 {len(active)}"
-        assert "二次函数" in active[0].content
+        assert len(active) == 2, f"应保留 2 条 active，实际 {len(active)}"
+        assert {m.content for m in active} == {"薄弱点：解方程移项", "薄弱点：二次函数"}
     finally:
         db.close()

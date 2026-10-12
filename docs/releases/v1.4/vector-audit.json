@@ -1,0 +1,26 @@
+{
+  "audit_date": "2026-10-12",
+  "backup": {
+    "path": "backend/data/chroma_db.backup-v1.4-20261012",
+    "file_count": 10,
+    "bytes": 11592886
+  },
+  "before": {
+    "missing_vector_ids": [83, 84, 88, 89, 90, 91, 92, 93, 94, 95, 99, 100, 101, 102, 103, 107, 108, 109, 110, 111, 112, 116],
+    "orphan_vector_ids": [39, 55, 121, 128, 135, 143, 150, 158, 167],
+    "metadata_error_ids": [],
+    "invalid_knowledge_link_ids": []
+  },
+  "after_apply": {
+    "missing_vector_ids": [],
+    "orphan_vector_ids": [],
+    "metadata_error_ids": [],
+    "invalid_knowledge_link_ids": []
+  },
+  "after_final_tests": {
+    "missing_vector_ids": [],
+    "orphan_vector_ids": [],
+    "metadata_error_ids": [],
+    "invalid_knowledge_link_ids": []
+  }
+}

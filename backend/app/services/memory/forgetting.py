@@ -39,11 +39,14 @@ def review_failure(strength: float) -> tuple[float, int]:
 
 
 def retention_weight(
-    strength: float, last_reviewed_at: datetime | None, now: datetime | None = None
+    strength: float,
+    last_reviewed_at: datetime | None,
+    now: datetime | None = None,
+    created_at: datetime | None = None,
 ) -> float:
     """记忆检索权重（基于上次复习/创建时间）"""
     now = now or datetime.now()
-    base_time = last_reviewed_at or now
+    base_time = last_reviewed_at or created_at or now
     days = max(0.0, (now - base_time).total_seconds() / 86400.0)
     return calculate_retention(strength, days)
 
@@ -72,11 +75,15 @@ class ReviewScheduler:
         db.add(plan)
         return plan
 
-    def mark_reviewed(self, db, plan_id: int, success: bool) -> None:
+    def mark_reviewed(
+        self, db, plan_id: int, success: bool, now: datetime | None = None
+    ) -> ReviewPlan | None:
         """复习打卡：更新间隔/强度，安排下次复习"""
         plan = db.get(ReviewPlan, plan_id)
         if not plan:
-            return
+            return None
+
+        now = now or datetime.now()
 
         # 更新关联记忆强度
         if plan.target_type == "memory":
@@ -88,10 +95,24 @@ class ReviewScheduler:
                     )
                 else:
                     memory.strength, plan.interval_days = review_failure(memory.strength)
+                memory.last_reviewed_at = now
 
-        plan.next_review_at = datetime.now() + timedelta(days=plan.interval_days)
-        plan.status = "pending" if not success else "done"
+        if success:
+            plan.status = "done"
+            next_plan = ReviewPlan(
+                student_id=plan.student_id,
+                target_type=plan.target_type,
+                target_id=plan.target_id,
+                interval_days=plan.interval_days,
+                next_review_at=now + timedelta(days=plan.interval_days),
+                status="pending",
+            )
+            db.add(next_plan)
+        else:
+            plan.next_review_at = now + timedelta(days=plan.interval_days)
+            next_plan = plan
         db.commit()
+        return next_plan
 
     def get_due_reviews(self, db, student_id: int) -> list[ReviewPlan]:
         """到期待复习列表"""

@@ -48,7 +48,7 @@ def test_register_duplicate():
 
 
 def test_student_bound_to_user():
-    """带 token 创建的学生挂到用户，列表可按 user_id 过滤"""
+    """带 token 创建的学生挂到用户，列表只按 token 归属过滤。"""
     name = _uname()
     data = _register(name)
     token = data["token"]
@@ -63,13 +63,15 @@ def test_student_bound_to_user():
     assert r.status_code == 201, r.text
     assert r.json()["user_id"] == uid
 
-    r2 = client.post(
+    anonymous = client.post(
         "/api/students", json={"name": "匿名测试", "grade": "初一", "subject": "数学"}
     )
-    assert r2.status_code == 201
-    assert r2.json()["user_id"] is None
+    assert anonymous.status_code == 401
 
-    mine = client.get("/api/students", params={"user_id": uid}).json()
+    mine = client.get(
+        "/api/students",
+        params={"user_id": uid + 999},
+        headers=headers,
+    ).json()
     assert all(s["user_id"] == uid for s in mine)
     assert any(s["name"] == "账号关联测试" for s in mine)
-    assert not any(s["name"] == "匿名测试" for s in mine)

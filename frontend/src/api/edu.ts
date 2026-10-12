@@ -72,9 +72,45 @@ export interface WrongQuestion {
   created_at?: string
 }
 
+export interface StudentReport {
+  student: { id: number; name: string; grade: string; subject: string }
+  memory_counts: Record<string, number>
+  memory_total: number
+  review: { total: number; due: number; done: number; pending: number }
+  wrong_questions: { total: number; mastered: number; unmastered: number }
+  weaknesses: string[]
+  strengths: string[]
+}
+
+export interface QuizGenerateRequest {
+  student_id: number
+  subject: string
+  count: number
+  difficulty: string
+}
+
+export interface QuizQuestion {
+  type: string
+  question: string
+  options?: string[]
+  answer: string
+  analysis: string
+  knowledge_point_id?: number | null
+  knowledge_point_title?: string
+}
+
+export interface WrongQuestionCreate {
+  student_id: number
+  question_text: string
+  answer?: string
+  analysis?: string
+  error_type?: string
+  knowledge_point_id?: number | null
+}
+
 export const eduApi = {
   // 学生
-  listStudents: (user_id?: number) => client.get<Student[]>('/students', { params: { user_id } }).then((r) => r.data),
+  listStudents: () => client.get<Student[]>('/students').then((r) => r.data),
   createStudent: (data: Partial<Student>) =>
     client.post<Student>('/students', data).then((r) => r.data),
   getProfile: (sid: number) =>
@@ -85,6 +121,8 @@ export const eduApi = {
     client.get<ReviewPlan[]>(`/students/${sid}/review-plans`).then((r) => r.data),
   getWrongQuestions: (sid: number) =>
     client.get<WrongQuestion[]>(`/students/${sid}/wrong-questions`).then((r) => r.data),
+  getReport: (sid: number) =>
+    client.get<StudentReport>(`/students/${sid}/report`).then((r) => r.data),
 
   // 对话
   chat: (student_id: number, message: string, session_id?: number) =>
@@ -95,6 +133,14 @@ export const eduApi = {
   // 复习
   reviewMemory: (memory_id: number, success: boolean) =>
     client.post(`/memories/${memory_id}/review`, { success }).then((r) => r.data),
+
+  // 练习与错题
+  generateQuiz: (data: QuizGenerateRequest) =>
+    client
+      .post<{ count: number; questions: QuizQuestion[] }>('/quiz/generate', data)
+      .then((r) => r.data),
+  recordWrongQuestion: (data: WrongQuestionCreate) =>
+    client.post('/wrong-questions', data).then((r) => r.data),
 
   // 知识图谱
   getGraph: (subject?: string) =>

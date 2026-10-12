@@ -15,6 +15,17 @@ from app.services.knowledge.chroma_client import get_knowledge_collection
 logger = logging.getLogger(__name__)
 
 
+def relink_memories(db, memories, *, storage=None) -> int:
+    """知识点替换后重新关联本次受影响的记忆。"""
+    if storage is None:
+        from app.services.memory.storage import MemoryStorage
+
+        storage = MemoryStorage()
+    for memory in memories:
+        storage._link_knowledge_point(db, memory)
+    return len(memories)
+
+
 def _slug(subject: str, grade: str, title: str, chapter: str) -> str:
     h = hashlib.md5(f"{subject}:{grade}:{chapter}:{title}".encode("utf-8")).hexdigest()[:6]
     return f"{title}-{h}"
@@ -32,6 +43,7 @@ class KnowledgeGraphService:
             return 0
         db = SessionLocal()
         try:
+            affected_memories = []
             # 幂等：删除同章旧数据（先清外键引用：边 + 记忆关联）
             old = (
                 db.query(KnowledgePoint)
@@ -52,9 +64,10 @@ class KnowledgeGraphService:
                 ).delete(synchronize_session=False)
                 from app.models.memory import Memory
 
-                for m in db.query(Memory).filter(
+                affected_memories = db.query(Memory).filter(
                     Memory.knowledge_point_id.in_(old_ids)
-                ).all():
+                ).all()
+                for m in affected_memories:
                     m.knowledge_point_id = None
                 for kp in old:
                     db.delete(kp)
@@ -116,6 +129,9 @@ class KnowledgeGraphService:
                                 link_type="related",
                             )
                         )
+
+            if affected_memories:
+                relink_memories(db, affected_memories)
 
             db.commit()
             logger.info(f"落库成功: {subject}/{grade}/{chapter} 共 {len(points)} 知识点")
