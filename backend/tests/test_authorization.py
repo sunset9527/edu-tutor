@@ -37,6 +37,7 @@ def test_cross_account_student_resources_are_hidden():
     student_id = None
     memory_id = None
     wrong_id = None
+    session_id = None
     try:
         created = client.post(
             "/api/students",
@@ -73,9 +74,13 @@ def test_cross_account_student_resources_are_hidden():
                 mastered=0,
             )
             db.add(wrong)
+            tutor_session = TutorSession(student_id=student_id, subject="数学")
+            db.add(tutor_session)
             db.commit()
             db.refresh(wrong)
+            db.refresh(tutor_session)
             wrong_id = wrong.id
+            session_id = tutor_session.id
         finally:
             db.close()
 
@@ -118,6 +123,15 @@ def test_cross_account_student_resources_are_hidden():
         assert client.post(
             "/api/chat",
             json={"student_id": student_id, "message": "测试"},
+            headers=other_headers,
+        ).status_code == 404
+        assert client.get(
+            "/api/knowledge/path/1",
+            params={"student_id": student_id},
+            headers=other_headers,
+        ).status_code == 404
+        assert client.post(
+            f"/api/sessions/{session_id}/end",
             headers=other_headers,
         ).status_code == 404
 

@@ -14,6 +14,14 @@ PARAM_DEFAULTS = {
     "review_interval_base": None,
     "consolidation_threshold": None,
     "extract_min_confidence": None,
+    "retrieval_weight_similarity": None,
+    "retrieval_weight_recency": None,
+    "retrieval_weight_retention": None,
+    "retrieval_weight_confidence": None,
+    "retrieval_recency_days": None,
+    "retrieval_profile_quota": None,
+    "retrieval_relevant_quota": None,
+    "retrieval_recent_quota": None,
 }
 
 

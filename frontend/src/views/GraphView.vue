@@ -67,22 +67,25 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { GraphChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
-import { eduApi, type GraphData } from '../api/edu'
+import { eduApi, type GraphData, type LearningPathStep } from '../api/edu'
+import { useStudentStore } from '../stores/student'
 
 use([CanvasRenderer, GraphChart, TooltipComponent])
 
 const subjects = ['数学', '语文', '生物']
+const studentStore = useStudentStore()
 const subject = ref('数学')
 const graph = ref<GraphData>({ nodes: [], edges: [] })
 const stats = ref<{ connect_rate: number }>({ connect_rate: 0 })
 const detail = ref<any>(null)
-const learningPath = ref<any[]>([])
+const learningPath = ref<LearningPathStep[]>([])
 const pathLoading = ref(false)
 
 async function showPath(kpId: number) {
+  if (!studentStore.current) return
   pathLoading.value = true
   try {
-    const r = await eduApi.getLearningPath(kpId)
+    const r = await eduApi.getLearningPath(kpId, studentStore.current.id)
     learningPath.value = r.path
   } catch (e) {
     learningPath.value = []

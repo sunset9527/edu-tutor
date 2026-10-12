@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.models.session import Session as TutorSession
 from app.models.student import Student
 from app.schemas.chat import ChatRequest, ChatResponse
+from app.services.memory.session_lifecycle import end_session_with_summary
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -44,3 +45,14 @@ def chat(
 
     response = run_chat(student_id=student.id, session_id=session_id, user_message=payload.message)
     return ChatResponse(session_id=session_id, response=response)
+
+
+@router.post("/sessions/{session_id}/end")
+def end_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_current_user_id),
+):
+    """结束会话并生成可追溯的情景记忆。"""
+    tutor_session = get_owned_session(db, session_id, user_id)
+    return end_session_with_summary(db, tutor_session)

@@ -41,6 +41,16 @@ class Settings(BaseSettings):
     decay_lambda: float = 0.1  # 遗忘速率 λ：越大忘得越快（评测时对比不同 λ）
     review_interval_base: int = 1  # 首次复习间隔（天）
 
+    # ---- v1.5 可解释检索 ----
+    retrieval_weight_similarity: float = 0.45
+    retrieval_weight_recency: float = 0.15
+    retrieval_weight_retention: float = 0.25
+    retrieval_weight_confidence: float = 0.15
+    retrieval_recency_days: float = 14.0
+    retrieval_profile_quota: int = 8
+    retrieval_relevant_quota: int = 3
+    retrieval_recent_quota: int = 3
+
     @property
     def sqlalchemy_url(self) -> str:
         return (

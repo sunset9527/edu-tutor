@@ -58,7 +58,15 @@ def test_storage_write_and_retrieve():
 
     retriever = MemoryRetriever()
     result = retriever.retrieve(student_id, "这个学生最怕什么数学内容？")
-    assert any("解方程" in line for line in result["relevant_memories"]), result
+    assert any(
+        "解方程" in row.get("content", "")
+        for row in result["trace"]["candidates"]
+    ), result
+    # 已进入画像的同一条记忆不会再次注入相关记忆区。
+    assert any(
+        row.get("reason") == "duplicate_in_other_channel"
+        for row in result["trace"]["candidates"]
+    )
     assert "薄弱点" in result["profile_summary"]
 
 

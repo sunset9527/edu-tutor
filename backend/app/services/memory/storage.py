@@ -13,6 +13,7 @@ from app.models.memory import Memory, MemoryConflict
 from app.models.student import StudentProfile
 from app.services import settings_service
 from app.services.memory.chroma_client import get_memory_collection
+from app.services.memory.lifecycle import build_provenance
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,14 @@ class MemoryStorage:
         self.collection = get_memory_collection()
 
     def write(
-        self, student_id: int, session_id: int | None = None, items: list[dict] | None = None
+        self,
+        student_id: int,
+        session_id: int | None = None,
+        items: list[dict] | None = None,
+        *,
+        source_message_id: int | None = None,
+        extraction_version: str = "v1.5",
+        model_name: str = "unknown",
     ) -> int:
         """写入多条记忆，返回写入条数（session_id 可空，如批量导入场景）"""
         items = items or []
@@ -114,7 +122,28 @@ class MemoryStorage:
                     "predicate": predicate,
                     "object": obj,
                     "knowledge_point_id": item.get("knowledge_point_id"),
+                    "provenance": item.get("provenance")
+                    or build_provenance(
+                        session_id=session_id,
+                        message_id=source_message_id,
+                        extraction_version=extraction_version,
+                        model_name=model_name,
+                    ),
                 }
+
+                if mtype == "procedural" and predicate == "有效策略":
+                    changed, activated_id = self._record_procedural_evidence(
+                        db,
+                        student_id,
+                        incoming_fact,
+                        confidence,
+                        session_id=session_id,
+                    )
+                    if activated_id is not None:
+                        written_vector_ids.append(activated_id)
+                    if changed:
+                        count += 1
+                    continue
 
                 if self._has_conflict(
                     db,
@@ -176,6 +205,96 @@ class MemoryStorage:
             raise
         finally:
             db.close()
+
+    def _record_procedural_evidence(
+        self,
+        db,
+        student_id: int,
+        incoming_fact: dict,
+        confidence: float,
+        *,
+        session_id: int | None,
+    ) -> tuple[bool, int | None]:
+        """累计相同教学策略证据，达到阈值时才激活长期记忆。"""
+        threshold = max(
+            1,
+            settings_service.get_int("consolidation_threshold", 3),
+        )
+        rows = (
+            db.query(Memory)
+            .filter(
+                Memory.student_id == student_id,
+                Memory.memory_type == "procedural",
+                Memory.status.in_(["candidate", "active"]),
+            )
+            .all()
+        )
+        strategy = incoming_fact.get("object")
+        existing = next(
+            (row for row in rows if (row.structured_data or {}).get("object") == strategy),
+            None,
+        )
+        if existing:
+            structured = dict(existing.structured_data or {})
+            history = list(structured.get("provenance_history") or [])
+            provenance = incoming_fact["provenance"]
+            source_key = (
+                provenance.get("source_session_id"),
+                provenance.get("source_message_id"),
+            )
+            if source_key != (None, None) and any(
+                (
+                    item.get("source_session_id"),
+                    item.get("source_message_id"),
+                )
+                == source_key
+                for item in history
+            ):
+                return False, None
+            evidence_count = int(structured.get("evidence_count", 1)) + 1
+            history.append(incoming_fact["provenance"])
+            structured.update(
+                {
+                    "predicate": "有效策略",
+                    "object": strategy,
+                    "evidence_count": evidence_count,
+                    "provenance": incoming_fact["provenance"],
+                    "provenance_history": history,
+                }
+            )
+            existing.structured_data = structured
+            existing.confidence = max(existing.confidence, confidence)
+            existing.source_session_id = session_id or existing.source_session_id
+            if existing.status == "candidate" and evidence_count >= threshold:
+                existing.status = "active"
+                upsert_memory_vector(existing, collection=self.collection)
+                from app.services.memory.forgetting import ReviewScheduler
+
+                ReviewScheduler().create_plan(db, student_id, "memory", existing.id)
+                return True, existing.id
+            return True, None
+
+        structured = dict(incoming_fact)
+        structured["evidence_count"] = 1
+        structured["provenance_history"] = [incoming_fact["provenance"]]
+        memory = Memory(
+            student_id=student_id,
+            memory_type="procedural",
+            content=f"有效策略：{strategy}",
+            structured_data=structured,
+            source_session_id=session_id,
+            confidence=confidence,
+            status="active" if threshold == 1 else "candidate",
+        )
+        db.add(memory)
+        db.flush()
+        if memory.status == "active":
+            upsert_memory_vector(memory, collection=self.collection)
+            from app.services.memory.forgetting import ReviewScheduler
+
+            ReviewScheduler().create_plan(db, student_id, "memory", memory.id)
+            return True, memory.id
+        return True, None
 
     def _has_conflict(
         self,

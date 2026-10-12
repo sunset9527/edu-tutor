@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.core.llm import create_llm
 from app.models.knowledge import KnowledgePoint, WrongQuestion
 from app.models.memory import Memory
+from app.services.memory.learning_state import record_practice_result
 
 logger = logging.getLogger(__name__)
 
@@ -123,19 +124,44 @@ def record_wrong_question(
 ):
     """记录错题（智能出题做错 → 入错题本）"""
     get_owned_student(db, payload.student_id, user_id)
-    wq = WrongQuestion(
-        student_id=payload.student_id,
-        knowledge_point_id=payload.knowledge_point_id,
-        question_text=payload.question_text,
-        answer=payload.answer,
-        analysis=payload.analysis,
-        error_type=payload.error_type,
-        mastered=0,
-    )
-    db.add(wq)
-    db.commit()
-    db.refresh(wq)
-    return {"ok": True, "id": wq.id}
+    mastery_update = None
+    if payload.knowledge_point_id is not None:
+        def add_wrong_question(transaction_db):
+            wrong = WrongQuestion(
+                student_id=payload.student_id,
+                knowledge_point_id=payload.knowledge_point_id,
+                question_text=payload.question_text,
+                answer=payload.answer,
+                analysis=payload.analysis,
+                error_type=payload.error_type,
+                mastered=0,
+            )
+            transaction_db.add(wrong)
+            transaction_db.flush()
+            return wrong.id
+
+        mastery_update = record_practice_result(
+            payload.student_id,
+            payload.knowledge_point_id,
+            success=False,
+            transaction_mutation=add_wrong_question,
+        )
+        wrong_id = mastery_update.pop("transaction_result")
+    else:
+        wq = WrongQuestion(
+            student_id=payload.student_id,
+            knowledge_point_id=None,
+            question_text=payload.question_text,
+            answer=payload.answer,
+            analysis=payload.analysis,
+            error_type=payload.error_type,
+            mastered=0,
+        )
+        db.add(wq)
+        db.commit()
+        db.refresh(wq)
+        wrong_id = wq.id
+    return {"ok": True, "id": wrong_id, "mastery_update": mastery_update}
 
 
 @router.put("/wrong-questions/{wq_id}/mastered")
@@ -146,6 +172,29 @@ def mark_wrong_mastered(
 ):
     """标记错题已掌握"""
     wq = get_owned_wrong_question(db, wq_id, user_id)
-    wq.mastered = 1
-    db.commit()
-    return {"ok": True, "id": wq_id, "mastered": 1}
+    was_mastered = bool(wq.mastered)
+    mastery_update = None
+    if was_mastered:
+        return {"ok": True, "id": wq_id, "mastered": 1, "mastery_update": None}
+    if wq.knowledge_point_id is not None:
+        def mark_mastered(transaction_db):
+            transaction_wrong = transaction_db.get(WrongQuestion, wq_id)
+            transaction_wrong.mastered = 1
+            return wq_id
+
+        mastery_update = record_practice_result(
+            wq.student_id,
+            wq.knowledge_point_id,
+            success=True,
+            transaction_mutation=mark_mastered,
+        )
+        mastery_update.pop("transaction_result")
+    else:
+        wq.mastered = 1
+        db.commit()
+    return {
+        "ok": True,
+        "id": wq_id,
+        "mastered": 1,
+        "mastery_update": mastery_update,
+    }

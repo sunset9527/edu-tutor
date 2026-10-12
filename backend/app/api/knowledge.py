@@ -2,6 +2,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.api.access import get_owned_student
+from app.api.auth import require_current_user_id
 from app.core.database import get_db
 from app.models.knowledge import KnowledgePoint
 from app.services.knowledge.graph_service import KnowledgeGraphService
@@ -37,16 +39,22 @@ def knowledge_detail(kp_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/path/{kp_id}")
-def learning_path(kp_id: int, db: Session = Depends(get_db)):
-    """个性化学习路径：目标知识点的前置知识链（v1.3）"""
-    from app.services.knowledge.path_service import build_learning_path
+def learning_path(
+    kp_id: int,
+    student_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_current_user_id),
+):
+    """基于图谱、掌握度、错题与复习证据生成个性化路径。"""
+    from app.services.knowledge.path_service import build_personalized_learning_path
 
+    get_owned_student(db, student_id, user_id)
     target = db.get(KnowledgePoint, kp_id)
     if not target:
         raise HTTPException(status_code=404, detail="知识点不存在")
-    path = build_learning_path(db, kp_id)
+    result = build_personalized_learning_path(db, student_id, kp_id)
     return {
         "target": {"id": target.id, "title": target.title, "subject": target.subject},
-        "path": path,
+        **result,
     }
 

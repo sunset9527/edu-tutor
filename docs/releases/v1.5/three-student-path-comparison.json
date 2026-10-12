@@ -1,0 +1,109 @@
+{
+  "generated_at": "2026-10-12T10:34:42",
+  "dataset": "临时数据库验收夹具；生成脚本结束后已清理",
+  "target": {
+    "id": 1393,
+    "title": "一元一次方程"
+  },
+  "students": [
+    {
+      "student": "验收学生甲",
+      "student_id": 263,
+      "session_ids": [70, 71, 72],
+      "session_1_profile": {
+        "weakness": "整数运算符号",
+        "preference": "先看图再看公式"
+      },
+      "session_2_retrieved_profile": "薄弱点：整数运算符号\n学习偏好：先看图再看公式（置信度90%）",
+      "session_3_mastery": [
+        {"knowledge_point_id": 1391, "from": "不懂", "to": "基本会", "success": true},
+        {"knowledge_point_id": 1391, "from": "基本会", "to": "熟练", "success": true}
+      ],
+      "pending_knowledge_reviews": 1,
+      "path_ids": [1392, 1393],
+      "path": [
+        {
+          "id": 1392,
+          "title": "等式性质",
+          "mastery": "不懂",
+          "reasons": ["知识图谱中的前置知识", "当前掌握度为不懂"]
+        },
+        {
+          "id": 1393,
+          "title": "一元一次方程",
+          "mastery": "不懂",
+          "reasons": ["当前学习目标"]
+        }
+      ]
+    },
+    {
+      "student": "验收学生乙",
+      "student_id": 264,
+      "session_ids": [73, 74, 75],
+      "session_1_profile": {
+        "weakness": "等式性质",
+        "preference": "先做例题再总结"
+      },
+      "session_2_retrieved_profile": "薄弱点：等式性质\n学习偏好：先做例题再总结（置信度90%）",
+      "session_3_mastery": [
+        {"knowledge_point_id": 1392, "from": "不懂", "to": "基本会", "success": true},
+        {"knowledge_point_id": 1392, "from": "基本会", "to": "熟练", "success": true}
+      ],
+      "pending_knowledge_reviews": 1,
+      "path_ids": [1391, 1393],
+      "path": [
+        {
+          "id": 1391,
+          "title": "整数运算",
+          "mastery": "不懂",
+          "reasons": ["知识图谱中的前置知识", "当前掌握度为不懂"]
+        },
+        {
+          "id": 1393,
+          "title": "一元一次方程",
+          "mastery": "不懂",
+          "reasons": ["当前学习目标"]
+        }
+      ]
+    },
+    {
+      "student": "验收学生丙",
+      "student_id": 265,
+      "session_ids": [76, 77, 78],
+      "session_1_profile": {
+        "weakness": "移项变号",
+        "preference": "分步骤口述思路"
+      },
+      "session_2_retrieved_profile": "薄弱点：移项变号\n学习偏好：分步骤口述思路（置信度90%）",
+      "session_3_mastery": [
+        {"knowledge_point_id": 1391, "from": "不懂", "to": "不懂", "success": false},
+        {"knowledge_point_id": 1392, "from": "不懂", "to": "不懂", "success": false}
+      ],
+      "pending_knowledge_reviews": 2,
+      "path_ids": [1391, 1392, 1393],
+      "path": [
+        {
+          "id": 1391,
+          "title": "整数运算",
+          "mastery": "不懂",
+          "memory_ids": [346],
+          "reasons": ["知识图谱中的前置知识", "当前掌握度为不懂"]
+        },
+        {
+          "id": 1392,
+          "title": "等式性质",
+          "mastery": "不懂",
+          "memory_ids": [347],
+          "reasons": ["知识图谱中的前置知识", "当前掌握度为不懂"]
+        },
+        {
+          "id": 1393,
+          "title": "一元一次方程",
+          "mastery": "不懂",
+          "reasons": ["当前学习目标"]
+        }
+      ]
+    }
+  ],
+  "assertion": "三名学生面对同一目标得到三条不同路径；差异来自掌握状态记录，未调用 LLM 推测前置知识。"
+}

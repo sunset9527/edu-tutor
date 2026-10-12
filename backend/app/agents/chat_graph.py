@@ -12,7 +12,6 @@ from functools import lru_cache
 from typing import TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from app.core.config import settings
@@ -36,6 +35,7 @@ class ChatState(TypedDict):
     history: list  # list[BaseMessage]
     memory_context: str  # 记忆注入文本
     ai_response: str
+    saved_message_ids: list[int]
 
 
 def _load_recent_messages(session_id: int) -> list:
@@ -95,20 +95,21 @@ def save_messages_node(state: ChatState) -> ChatState:
     """节点 4：用户消息 + AI 回复落库（短期记忆持久化）"""
     db = SessionLocal()
     try:
-        db.add(
-            Message(session_id=state["session_id"], role="user", content=state["user_message"])
+        user_message = Message(
+            session_id=state["session_id"], role="user", content=state["user_message"]
         )
-        db.add(
-            Message(
-                session_id=state["session_id"],
-                role="assistant",
-                content=state["ai_response"],
-            )
+        assistant_message = Message(
+            session_id=state["session_id"],
+            role="assistant",
+            content=state["ai_response"],
         )
+        db.add_all([user_message, assistant_message])
+        db.flush()
+        message_ids = [user_message.id, assistant_message.id]
         db.commit()
     finally:
         db.close()
-    return {}
+    return {"saved_message_ids": message_ids}
 
 
 def extract_memory_node(state: ChatState) -> ChatState:
@@ -134,6 +135,9 @@ def extract_memory_node(state: ChatState) -> ChatState:
                 student_id=state["student_id"],
                 session_id=state["session_id"],
                 items=items,
+                source_message_id=(state.get("saved_message_ids") or [None])[-1],
+                extraction_version="v1.5",
+                model_name=settings.deepseek_model,
             )
     except Exception as e:  # noqa: BLE001
         # 记忆提取失败不应阻断对话主流程
@@ -145,7 +149,7 @@ def extract_memory_node(state: ChatState) -> ChatState:
 
 @lru_cache(maxsize=1)
 def build_chat_graph():
-    """构建并编译 LangGraph 工作流（开发期用内存 checkpointer）"""
+    """构建工作流；可恢复状态只从 MySQL 消息表读取。"""
     graph = StateGraph(ChatState)
     graph.add_node("load_history", load_history_node)
     graph.add_node("retrieve_memory", retrieve_memory_node)
@@ -158,7 +162,7 @@ def build_chat_graph():
     graph.add_edge("generate", "save_messages")
     graph.add_edge("save_messages", "extract_memory")
     graph.add_edge("extract_memory", END)
-    return graph.compile(checkpointer=MemorySaver())
+    return graph.compile()
 
 
 def run_chat(student_id: int, session_id: int, user_message: str) -> str:
@@ -168,7 +172,6 @@ def run_chat(student_id: int, session_id: int, user_message: str) -> str:
             "student_id": student_id,
             "session_id": session_id,
             "user_message": user_message,
-        },
-        config={"configurable": {"thread_id": str(session_id)}},
+        }
     )
     return result["ai_response"]

@@ -1,0 +1,57 @@
+{
+  "generated_at": "2026-10-12T10:34:42",
+  "dataset": "临时数据库验收夹具；生成脚本结束后已清理",
+  "query": "我该怎样学习方程？",
+  "quotas": {
+    "profile": 0,
+    "relevant": 1,
+    "recent": 0
+  },
+  "configured_weights": {
+    "similarity": 0.45,
+    "recency": 0.15,
+    "retention": 0.25,
+    "confidence": 0.15
+  },
+  "applied_weights": {
+    "similarity": 0.45,
+    "recency": 0.15,
+    "retention": 0.25,
+    "confidence": 0.15
+  },
+  "recency_decay_days": 14.0,
+  "candidates": [
+    {
+      "memory_id": 338,
+      "content": "薄弱点：整数运算符号",
+      "components": {
+        "similarity": 0.92,
+        "recency": 0.9957703788800601,
+        "retention": 0.5964501262746896,
+        "confidence": 0.9
+      },
+      "final_score": 0.8474780884006815,
+      "rank": 1,
+      "selected": true,
+      "reason": "selected"
+    },
+    {
+      "memory_id": 339,
+      "content": "学习偏好：先看图再看公式",
+      "components": {
+        "similarity": 0.65,
+        "recency": 0.9957769646847677,
+        "retention": 0.5964556489866121,
+        "confidence": 0.9
+      },
+      "final_score": 0.7259804569493682,
+      "rank": 2,
+      "selected": false,
+      "reason": "quota_exceeded"
+    }
+  ],
+  "selected_memories": [
+    "薄弱点：整数运算符号"
+  ],
+  "error": null
+}

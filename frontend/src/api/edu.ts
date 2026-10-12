@@ -53,6 +53,25 @@ export interface GraphData {
   edges: GraphEdge[]
 }
 
+export interface LearningPathStep {
+  id: number
+  title: string
+  difficulty: string
+  subject: string
+  grade?: string
+  is_target: boolean
+  mastery: string
+  wrong_count: number
+  review_due: boolean
+  reasons: string[]
+}
+
+export interface LearningPathResponse {
+  target: { id: number; title: string; subject: string }
+  path: LearningPathStep[]
+  evidence_gap?: string | null
+}
+
 export interface StudentProfile {
   id: number
   name: string
@@ -149,7 +168,12 @@ export const eduApi = {
     client.get('/knowledge/stats', { params: { subject } }).then((r) => r.data),
   getKnowledgeDetail: (id: number) =>
     client.get(`/knowledge/${id}`).then((r) => r.data),
-  getLearningPath: (id: number) => client.get(`/knowledge/path/${id}`).then((r) => r.data),
+  getLearningPath: (id: number, studentId: number) =>
+    client
+      .get<LearningPathResponse>(`/knowledge/path/${id}`, {
+        params: { student_id: studentId },
+      })
+      .then((r) => r.data),
 
   // 参数后台（v1.1）
   getSettings: () => client.get('/settings').then((r) => r.data),
