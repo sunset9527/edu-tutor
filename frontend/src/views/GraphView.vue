@@ -49,7 +49,15 @@
                 :class="{ target: step.id === detail.id }"
               >
                 <span class="path-num">{{ index + 1 }}</span>
-                <span>{{ step.title }}</span>
+                <div class="path-content">
+                  <div>
+                    <span>{{ step.title }}</span>
+                    <el-tag size="small" effect="plain" style="margin-left: 6px">{{ step.mastery }}</el-tag>
+                    <el-tag v-if="step.review_due" size="small" type="warning" style="margin-left: 4px">待复习</el-tag>
+                  </div>
+                  <div class="path-reasons">{{ step.reasons.join(' · ') }}</div>
+                  <div v-if="step.next_review_at" class="path-review">预计复习：{{ formatTime(step.next_review_at) }}</div>
+                </div>
               </div>
             </div>
             <div class="detail-md" v-html="mdToHtml(detail.content_md)"></div>
@@ -72,7 +80,7 @@ import { useStudentStore } from '../stores/student'
 
 use([CanvasRenderer, GraphChart, TooltipComponent])
 
-const subjects = ['数学', '语文', '生物']
+const subjects = ref<string[]>([])
 const studentStore = useStudentStore()
 const subject = ref('数学')
 const graph = ref<GraphData>({ nodes: [], edges: [] })
@@ -148,6 +156,10 @@ function difficultyType(d: string) {
   return d === '基础' ? 'success' : d === '进阶' ? 'warning' : 'danger'
 }
 
+function formatTime(value: string) {
+  return value.slice(0, 16).replace('T', ' ')
+}
+
 function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -165,7 +177,14 @@ function onClick(params: any) {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await studentStore.loadStudents()
+  subjects.value = await eduApi.getSubjects()
+  if (subjects.value.length && !subjects.value.includes(subject.value)) {
+    subject.value = subjects.value[0]
+  }
+  await load()
+})
 </script>
 
 <style scoped>
@@ -179,6 +198,9 @@ onMounted(load)
 .path-box { margin-top: 10px; background: #f8fafc; border-radius: 6px; padding: 10px; }
 .path-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
 .path-step { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 13px; }
+.path-content { flex: 1; min-width: 0; }
+.path-reasons { color: #606266; font-size: 12px; margin-top: 2px; }
+.path-review { color: #e6a23c; font-size: 12px; margin-top: 2px; }
 .path-step.target { color: #f56c6c; font-weight: 600; }
 .path-num { width: 18px; height: 18px; border-radius: 50%; background: #409eff; color: #fff; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .legend-tip { margin-top: 8px; flex-shrink: 0; }

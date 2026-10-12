@@ -60,7 +60,7 @@ import { eduApi } from '../api/edu'
 import { useStudentStore } from '../stores/student'
 
 const studentStore = useStudentStore()
-const subjects = ['数学', '语文', '英语', '生物']
+const subjects = ref<string[]>([])
 const studentId = ref<number | null>(null)
 const subject = ref('数学')
 const difficulty = ref('中等')
@@ -109,7 +109,14 @@ async function wrong(q: any) {
 }
 
 onMounted(async () => {
-  await studentStore.loadStudents()
+  const [, loadedSubjects] = await Promise.all([
+    studentStore.loadStudents(),
+    eduApi.getSubjects(),
+  ])
+  subjects.value = loadedSubjects
+  if (subjects.value.length && !subjects.value.includes(subject.value)) {
+    subject.value = subjects.value[0]
+  }
   if (studentStore.students.length) studentId.value = studentStore.students[0].id
 })
 </script>

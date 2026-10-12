@@ -37,6 +37,13 @@
       </div>
     </el-card>
 
+    <el-card shadow="never" style="margin-bottom: 12px">
+      <template #header>📈 真实学习事件趋势</template>
+      <el-empty v-if="!report?.timeline.length" description="v1.6 启用后尚无学习事件" :image-size="60" />
+      <v-chart v-else class="timeline-chart" :option="timelineOption" autoresize />
+      <div v-if="report?.timeline.length" class="trace-tip">图中每个点都保留对应 learning_events 记录 ID，可回查数据库。</div>
+    </el-card>
+
     <el-row :gutter="12">
       <el-col :span="12">
         <el-card shadow="never">
@@ -76,8 +83,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { BarChart, LineChart } from 'echarts/charts'
+import { TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
+import VChart from 'vue-echarts'
 import {
   eduApi,
   type ReviewPlan,
@@ -87,12 +99,48 @@ import {
 } from '../api/edu'
 import { useStudentStore } from '../stores/student'
 
+use([CanvasRenderer, BarChart, LineChart, TooltipComponent, LegendComponent, GridComponent])
+
 const store = useStudentStore()
 const studentId = ref<number | null>(null)
 const report = ref<StudentReport | null>(null)
 const plans = ref<ReviewPlan[]>([])
 const wrongs = ref<WrongQuestion[]>([])
 const profile = ref<StudentProfile | null>(null)
+
+const timelineOption = computed(() => {
+  const points = report.value?.timeline || []
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter(params: any[]) {
+        const index = params[0]?.dataIndex ?? 0
+        const point = points[index]
+        const lines = params.map((item) => `${item.marker}${item.seriesName}：${item.value ?? '-'}`)
+        return [`日期：${point?.date}`, ...lines, `事件 ID：${point?.event_ids.join(', ')}`].join('<br/>')
+      },
+    },
+    legend: { top: 0 },
+    grid: { left: 45, right: 45, top: 42, bottom: 28 },
+    xAxis: { type: 'category', data: points.map((point) => point.date) },
+    yAxis: [
+      { type: 'value', name: '事件数', minInterval: 1 },
+      { type: 'value', name: '复习完成率', min: 0, max: 1 },
+    ],
+    series: [
+      { name: '掌握度变化', type: 'bar', data: points.map((p) => p.mastery_changes) },
+      { name: '新增错题', type: 'bar', data: points.map((p) => p.wrong_added) },
+      { name: '掌握错题', type: 'bar', data: points.map((p) => p.wrong_mastered) },
+      {
+        name: '复习完成率',
+        type: 'line',
+        yAxisIndex: 1,
+        connectNulls: false,
+        data: points.map((p) => p.review_completion_rate),
+      },
+    ],
+  }
+})
 
 async function load() {
   if (!studentId.value) return
@@ -126,4 +174,6 @@ onMounted(async () => {
 .plan-content { font-size: 14px; color: #303133; }
 .plan-meta { font-size: 12px; color: #c0c4cc; margin-top: 2px; }
 .plan-actions { display: flex; gap: 4px; }
+.timeline-chart { height: 300px; }
+.trace-tip { color: #909399; font-size: 12px; margin-top: 6px; }
 </style>

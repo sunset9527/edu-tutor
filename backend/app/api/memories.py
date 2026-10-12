@@ -11,12 +11,40 @@ from app.core.database import get_db
 from app.models.memory import Memory, ReviewPlan
 from app.services.memory.forgetting import ReviewScheduler
 from app.services.memory.storage import delete_memory_vector, upsert_memory_vector
+from app.services.learning_events import add_learning_event
 
 router = APIRouter(prefix="/api", tags=["memories"])
 
 
 class ReviewRequest(BaseModel):
     success: bool = True
+
+
+@router.post("/memories/{memory_id}/review-plan")
+def confirm_review_plan(
+    memory_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_current_user_id),
+):
+    """确认把对话产生的记忆加入复习；重复确认不会生成重复计划。"""
+    memory = get_owned_memory(db, memory_id, user_id)
+    existing = (
+        db.query(ReviewPlan)
+        .filter(
+            ReviewPlan.student_id == memory.student_id,
+            ReviewPlan.target_type == "memory",
+            ReviewPlan.target_id == memory_id,
+            ReviewPlan.status == "pending",
+        )
+        .order_by(ReviewPlan.id.desc())
+        .first()
+    )
+    if existing:
+        return {"ok": True, "created": False, "plan_id": existing.id}
+    plan = ReviewScheduler().create_plan(db, memory.student_id, "memory", memory_id)
+    db.commit()
+    db.refresh(plan)
+    return {"ok": True, "created": True, "plan_id": plan.id}
 
 
 @router.post("/memories/{memory_id}/review")
@@ -42,7 +70,21 @@ def review_memory(
         raise HTTPException(status_code=404, detail="未找到该记忆的待复习计划")
 
     scheduler = ReviewScheduler()
-    next_plan = scheduler.mark_reviewed(db, plan.id, payload.success)
+    next_plan = scheduler.mark_reviewed(db, plan.id, payload.success, commit=False)
+    add_learning_event(
+        db,
+        student_id=memory.student_id,
+        event_type="review_succeeded" if payload.success else "review_failed",
+        source_type="review_plan",
+        source_id=plan.id,
+        knowledge_point_id=memory.knowledge_point_id,
+        payload={
+            "target_type": "memory",
+            "target_id": memory_id,
+            "next_interval_days": next_plan.interval_days if next_plan else None,
+        },
+    )
+    db.commit()
 
     return {
         "ok": True,

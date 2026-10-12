@@ -23,6 +23,19 @@ def knowledge_stats(subject: str | None = None):
     return KnowledgeGraphService().get_stats(subject)
 
 
+@router.get("/subjects")
+def knowledge_subjects(db: Session = Depends(get_db)):
+    """返回数据库中真实存在的科目，供前端筛选使用。"""
+    rows = (
+        db.query(KnowledgePoint.subject)
+        .filter(KnowledgePoint.subject.isnot(None))
+        .distinct()
+        .order_by(KnowledgePoint.subject)
+        .all()
+    )
+    return {"subjects": [subject for (subject,) in rows if subject]}
+
+
 @router.get("/{kp_id}")
 def knowledge_detail(kp_id: int, db: Session = Depends(get_db)):
     """知识点详情"""

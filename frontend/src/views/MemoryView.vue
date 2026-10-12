@@ -6,18 +6,18 @@
           <el-select v-model="studentId" placeholder="选择学生" style="width: 200px" @change="load">
             <el-option v-for="s in store.students" :key="s.id" :label="`${s.name}（${s.grade}）`" :value="s.id" />
           </el-select>
-          <el-tag v-if="store.current" effect="plain" type="info">记忆 {{ memories.length }} 条</el-tag>
+          <el-tag v-if="store.current" effect="plain" type="info">记忆 {{ total }} 条</el-tag>
         </div>
-        <span class="curve-tip">遗忘曲线：R = strength × e^(-λt)，λ=0.1</span>
+        <span class="curve-tip">遗忘曲线：R = strength × e^(-λt)，当前 λ={{ decayLambda }}</span>
       </div>
     </el-card>
 
     <el-row :gutter="12" class="fill-row">
       <el-col :span="10" class="fill-col">
         <el-card shadow="never" class="fill-card">
-          <template #header>📉 记忆遗忘曲线（理论）</template>
+          <template #header>📉 当前记忆保留率预测</template>
           <v-chart class="curve-chart" :option="curveOption" autoresize />
-          <p class="curve-desc">复习成功 → 强度上升 → 遗忘变慢（曲线上移）。</p>
+          <p class="curve-desc">每条曲线从真实强度和最近复习/创建时间起算，横轴为从今天开始的天数。</p>
         </el-card>
       </el-col>
       <el-col :span="14" class="fill-col">
@@ -25,7 +25,7 @@
           <template #header>
             <div class="row-between">
               <span>🧠 记忆库</span>
-              <el-radio-group v-model="filter" size="small">
+              <el-radio-group v-model="filter" size="small" @change="onFilterChange">
                 <el-radio-button label="all">全部</el-radio-button>
                 <el-radio-button label="semantic">画像</el-radio-button>
                 <el-radio-button label="episodic">情景</el-radio-button>
@@ -34,7 +34,7 @@
             </div>
           </template>
           <el-scrollbar class="fill-scroll">
-            <div v-for="mem in filtered" :key="mem.id" class="mem-row">
+            <div v-for="mem in memories" :key="mem.id" class="mem-row">
               <el-tag size="small" :type="typeColor(mem.memory_type)">{{ typeLabel(mem.memory_type) }}</el-tag>
               <div class="mem-row-body">
                 <div class="mem-row-content">{{ mem.content }}</div>
@@ -48,8 +48,17 @@
                 <el-button size="small" type="danger" text @click="remove(mem)">删除</el-button>
               </div>
             </div>
-            <el-empty v-if="!filtered.length" description="暂无记忆" />
+            <el-empty v-if="!memories.length" description="暂无记忆" />
           </el-scrollbar>
+          <el-pagination
+            v-if="total > pageSize"
+            v-model:current-page="page"
+            :page-size="pageSize"
+            :total="total"
+            layout="prev, pager, next"
+            small
+            @current-change="load"
+          />
         </el-card>
       </el-col>
     </el-row>
@@ -80,20 +89,25 @@ const store = useStudentStore()
 const studentId = ref<number | null>(null)
 const memories = ref<MemoryItem[]>([])
 const filter = ref('all')
-
-const filtered = computed(() =>
-  filter.value === 'all' ? memories.value : memories.value.filter((m) => m.memory_type === filter.value)
-)
+const total = ref(0)
+const page = ref(1)
+const pageSize = 20
+const decayLambda = ref(0.1)
 
 const curveOption = computed(() => {
   const days = Array.from({ length: 31 }, (_, i) => i)
-  const strengths = [0.3, 0.6, 0.83, 0.95]
-  const series = strengths.map((s) => ({
-    name: `strength=${s}`,
-    type: 'line',
-    smooth: true,
-    data: days.map((d) => Number((s * Math.exp(-0.1 * d)).toFixed(3))),
-  }))
+  const now = Date.now()
+  const series = memories.value.slice(0, 8).map((memory) => {
+    const rawBase = memory.last_reviewed_at || memory.created_at
+    const base = rawBase ? new Date(rawBase).getTime() : now
+    const ageDays = Math.max(0, (now - base) / 86_400_000)
+    return {
+      name: `#${memory.id} ${memory.content.slice(0, 12)}`,
+      type: 'line',
+      smooth: true,
+      data: days.map((d) => Number((memory.strength * Math.exp(-decayLambda.value * (ageDays + d))).toFixed(3))),
+    }
+  })
   return {
     tooltip: { trigger: 'axis' },
     legend: { bottom: 0 },
@@ -113,7 +127,18 @@ function typeColor(t: string) {
 
 async function load() {
   if (!studentId.value) return
-  memories.value = await eduApi.getMemories(studentId.value)
+  const result = await eduApi.getMemories(studentId.value, {
+    memory_type: filter.value === 'all' ? undefined : filter.value,
+    page: page.value,
+    page_size: pageSize,
+  })
+  memories.value = result.items
+  total.value = result.total
+}
+
+function onFilterChange() {
+  page.value = 1
+  load()
 }
 
 const editing = ref<MemoryItem | null>(null)
@@ -147,7 +172,8 @@ async function review(mem: MemoryItem, success: boolean) {
 }
 
 onMounted(async () => {
-  await store.loadStudents()
+  const [, settings] = await Promise.all([store.loadStudents(), eduApi.getSettings()])
+  decayLambda.value = Number(settings.decay_lambda ?? 0.1)
   if (store.students.length) {
     studentId.value = store.students[0].id
     await load()

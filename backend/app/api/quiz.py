@@ -13,6 +13,7 @@ from app.core.llm import create_llm
 from app.models.knowledge import KnowledgePoint, WrongQuestion
 from app.models.memory import Memory
 from app.services.memory.learning_state import record_practice_result
+from app.services.learning_events import add_learning_event
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,15 @@ def record_wrong_question(
             )
             transaction_db.add(wrong)
             transaction_db.flush()
+            add_learning_event(
+                transaction_db,
+                student_id=payload.student_id,
+                event_type="wrong_question_added",
+                source_type="wrong_question",
+                source_id=wrong.id,
+                knowledge_point_id=payload.knowledge_point_id,
+                payload={"error_type": payload.error_type},
+            )
             return wrong.id
 
         mastery_update = record_practice_result(
@@ -158,6 +168,15 @@ def record_wrong_question(
             mastered=0,
         )
         db.add(wq)
+        db.flush()
+        add_learning_event(
+            db,
+            student_id=payload.student_id,
+            event_type="wrong_question_added",
+            source_type="wrong_question",
+            source_id=wq.id,
+            payload={"error_type": payload.error_type},
+        )
         db.commit()
         db.refresh(wq)
         wrong_id = wq.id
@@ -180,6 +199,14 @@ def mark_wrong_mastered(
         def mark_mastered(transaction_db):
             transaction_wrong = transaction_db.get(WrongQuestion, wq_id)
             transaction_wrong.mastered = 1
+            add_learning_event(
+                transaction_db,
+                student_id=wq.student_id,
+                event_type="wrong_question_mastered",
+                source_type="wrong_question",
+                source_id=wq_id,
+                knowledge_point_id=wq.knowledge_point_id,
+            )
             return wq_id
 
         mastery_update = record_practice_result(
@@ -191,6 +218,13 @@ def mark_wrong_mastered(
         mastery_update.pop("transaction_result")
     else:
         wq.mastered = 1
+        add_learning_event(
+            db,
+            student_id=wq.student_id,
+            event_type="wrong_question_mastered",
+            source_type="wrong_question",
+            source_id=wq_id,
+        )
         db.commit()
     return {
         "ok": True,

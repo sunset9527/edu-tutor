@@ -1,7 +1,7 @@
 """学生相关路由（v1.1：账号关联 + 按用户过滤）"""
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -87,19 +87,23 @@ def student_profile(
 @router.get("/{student_id}/memories")
 def student_memories(
     student_id: int,
+    memory_type: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     user_id: int = Depends(require_current_user_id),
 ):
     """记忆列表（前端记忆库页 + 对话侧边栏）"""
     get_owned_student(db, student_id, user_id)
-    rows = (
+    query = (
         db.query(Memory)
         .filter(Memory.student_id == student_id, Memory.status == "active")
-        .order_by(Memory.id.desc())
-        .limit(100)
-        .all()
     )
-    return [
+    if memory_type:
+        query = query.filter(Memory.memory_type == memory_type)
+    total = query.count()
+    rows = query.order_by(Memory.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    items = [
         {
             "id": m.id,
             "memory_type": m.memory_type,
@@ -108,10 +112,14 @@ def student_memories(
             "strength": m.strength,
             "mastery": m.mastery,
             "knowledge_point_id": m.knowledge_point_id,
-            "created_at": str(m.created_at),
+            "status": m.status,
+            "last_accessed_at": m.last_accessed_at.isoformat() if m.last_accessed_at else None,
+            "last_reviewed_at": m.last_reviewed_at.isoformat() if m.last_reviewed_at else None,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         for m in rows
     ]
+    return {"total": total, "page": page, "page_size": page_size, "items": items}
 
 
 @router.get("/{student_id}/wrong-questions")
@@ -153,6 +161,8 @@ def student_report(
     from app.models.knowledge import WrongQuestion
     from app.models.memory import Memory, ReviewPlan
     from app.models.student import StudentProfile
+    from app.models.learning_event import LearningEvent
+    from app.services.learning_events import build_report_timeline
 
     student = get_owned_student(db, student_id, user_id)
 
@@ -169,6 +179,12 @@ def student_report(
     wqs = db.query(WrongQuestion).filter(WrongQuestion.student_id == student_id).all()
 
     profile = db.get(StudentProfile, student_id)
+    events = (
+        db.query(LearningEvent)
+        .filter(LearningEvent.student_id == student_id)
+        .order_by(LearningEvent.occurred_at, LearningEvent.id)
+        .all()
+    )
 
     return {
         "student": {"id": student.id, "name": student.name, "grade": student.grade, "subject": student.subject},
@@ -182,5 +198,6 @@ def student_report(
         },
         "weaknesses": profile.weaknesses if profile else [],
         "strengths": profile.strengths if profile else [],
+        "timeline": build_report_timeline(events),
     }
 

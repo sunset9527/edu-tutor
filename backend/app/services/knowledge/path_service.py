@@ -144,17 +144,18 @@ def build_personalized_learning_path(
         wrong_counts[wrong.knowledge_point_id] = wrong_counts.get(wrong.knowledge_point_id, 0) + 1
 
     now = datetime.now()
-    due_rows = (
+    pending_rows = (
         db.query(ReviewPlan)
         .filter(
             ReviewPlan.student_id == student_id,
             ReviewPlan.target_type == "knowledge_point",
             ReviewPlan.target_id.in_(ordered_ids),
             ReviewPlan.status == "pending",
-            ReviewPlan.next_review_at <= now,
         )
+        .order_by(ReviewPlan.next_review_at, ReviewPlan.id)
         .all()
     )
+    due_rows = [row for row in pending_rows if row.next_review_at <= now]
     due_ids = {plan.target_id for plan in due_rows}
 
     path: list[dict] = []
@@ -165,6 +166,8 @@ def build_personalized_learning_path(
         mastery = mastery_by_kp.get(kp_id, "不懂")
         wrong_count = wrong_counts.get(kp_id, 0)
         review_due = kp_id in due_ids
+        kp_plans = [row for row in pending_rows if row.target_id == kp_id]
+        next_review_at = kp_plans[0].next_review_at if kp_plans else None
         weak = kp_id in weak_kps
         is_target = kp_id == target_kp_id
         mastered_and_clear = (
@@ -201,13 +204,14 @@ def build_personalized_learning_path(
                 "mastery": mastery,
                 "wrong_count": wrong_count,
                 "review_due": review_due,
+                "next_review_at": next_review_at.isoformat() if next_review_at else None,
                 "reasons": reasons,
                 "evidence": {
                     "memory_ids": memory_ids_by_kp.get(kp_id, []),
                     "wrong_question_ids": [
                         row.id for row in wrong_rows if row.knowledge_point_id == kp_id
                     ],
-                    "review_plan_ids": [row.id for row in due_rows if row.target_id == kp_id],
+                    "review_plan_ids": [row.id for row in kp_plans],
                 },
             }
         )

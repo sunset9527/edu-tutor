@@ -76,7 +76,13 @@ class ReviewScheduler:
         return plan
 
     def mark_reviewed(
-        self, db, plan_id: int, success: bool, now: datetime | None = None
+        self,
+        db,
+        plan_id: int,
+        success: bool,
+        now: datetime | None = None,
+        *,
+        commit: bool = True,
     ) -> ReviewPlan | None:
         """复习打卡：更新间隔/强度，安排下次复习"""
         plan = db.get(ReviewPlan, plan_id)
@@ -111,7 +117,10 @@ class ReviewScheduler:
         else:
             plan.next_review_at = now + timedelta(days=plan.interval_days)
             next_plan = plan
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return next_plan
 
     def get_due_reviews(self, db, student_id: int) -> list[ReviewPlan]:

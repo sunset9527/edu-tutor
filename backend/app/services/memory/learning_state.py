@@ -10,6 +10,7 @@ from app.services import settings_service
 from app.services.memory.chroma_client import get_memory_collection
 from app.services.memory.lifecycle import transition_mastery
 from app.services.memory.storage import delete_memory_vector, upsert_memory_vector
+from app.services.learning_events import add_learning_event
 
 
 def _find_mastery_memory(db, student_id: int, knowledge_point_id: int) -> Memory | None:
@@ -128,6 +129,22 @@ def record_practice_result(
                     next_review_at=now + timedelta(days=base_interval),
                     status="pending",
                 )
+            )
+        if old_mastery != new_mastery:
+            add_learning_event(
+                db,
+                student_id=student_id,
+                event_type="mastery_changed",
+                source_type="knowledge_point",
+                source_id=knowledge_point_id,
+                knowledge_point_id=knowledge_point_id,
+                payload={
+                    "from": old_mastery,
+                    "to": new_mastery,
+                    "practice_result": "correct" if success else "wrong",
+                    "memory_id": memory.id,
+                },
+                occurred_at=now,
             )
         db.commit()
         result = {

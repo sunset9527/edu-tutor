@@ -18,6 +18,16 @@ export interface MemoryItem {
   mastery: string
   knowledge_point_id?: number | null
   created_at?: string
+  last_accessed_at?: string | null
+  last_reviewed_at?: string | null
+  status?: string
+}
+
+export interface MemoryPage {
+  total: number
+  page: number
+  page_size: number
+  items: MemoryItem[]
 }
 
 export interface ChatResponse {
@@ -63,6 +73,7 @@ export interface LearningPathStep {
   mastery: string
   wrong_count: number
   review_due: boolean
+  next_review_at?: string | null
   reasons: string[]
 }
 
@@ -99,6 +110,25 @@ export interface StudentReport {
   wrong_questions: { total: number; mastered: number; unmastered: number }
   weaknesses: string[]
   strengths: string[]
+  timeline: ReportTimelinePoint[]
+}
+
+export interface ReportTimelinePoint {
+  date: string
+  mastery_changes: number
+  wrong_added: number
+  wrong_mastered: number
+  review_succeeded: number
+  review_failed: number
+  review_completion_rate: number | null
+  event_ids: number[]
+}
+
+export interface SessionMessage {
+  id: number
+  role: string
+  content: string
+  created_at?: string | null
 }
 
 export interface QuizGenerateRequest {
@@ -134,8 +164,8 @@ export const eduApi = {
     client.post<Student>('/students', data).then((r) => r.data),
   getProfile: (sid: number) =>
     client.get<StudentProfile>(`/students/${sid}/profile`).then((r) => r.data),
-  getMemories: (sid: number) =>
-    client.get<MemoryItem[]>(`/students/${sid}/memories`).then((r) => r.data),
+  getMemories: (sid: number, params?: { memory_type?: string; page?: number; page_size?: number }) =>
+    client.get<MemoryPage>(`/students/${sid}/memories`, { params }).then((r) => r.data),
   getReviewPlans: (sid: number) =>
     client.get<ReviewPlan[]>(`/students/${sid}/review-plans`).then((r) => r.data),
   getWrongQuestions: (sid: number) =>
@@ -148,10 +178,20 @@ export const eduApi = {
     client
       .post<ChatResponse>('/chat', { student_id, message, session_id })
       .then((r) => r.data),
+  getSessionMessages: (sessionId: number) =>
+    client
+      .get<{ session_id: number; student_id: number; messages: SessionMessage[] }>(
+        `/sessions/${sessionId}/messages`,
+      )
+      .then((r) => r.data),
+  endSession: (sessionId: number) =>
+    client.post(`/sessions/${sessionId}/end`).then((r) => r.data),
 
   // 复习
   reviewMemory: (memory_id: number, success: boolean) =>
     client.post(`/memories/${memory_id}/review`, { success }).then((r) => r.data),
+  confirmReviewPlan: (memory_id: number) =>
+    client.post(`/memories/${memory_id}/review-plan`).then((r) => r.data),
 
   // 练习与错题
   generateQuiz: (data: QuizGenerateRequest) =>
@@ -174,6 +214,8 @@ export const eduApi = {
         params: { student_id: studentId },
       })
       .then((r) => r.data),
+  getSubjects: () =>
+    client.get<{ subjects: string[] }>('/knowledge/subjects').then((r) => r.data.subjects),
 
   // 参数后台（v1.1）
   getSettings: () => client.get('/settings').then((r) => r.data),

@@ -1,0 +1,10 @@
+[
+  {"event":"generation_started","data":{"sequence":1,"session_id":7}},
+  {"event":"memory_retrieved","data":{"sequence":2,"session_id":7,"selected":[{"memory_id":9,"content":"薄弱点：移项","selected":true,"reason":"selected"}]}},
+  {"event":"response_chunk","data":{"sequence":3,"session_id":7,"text":"先画图"}},
+  {"event":"response_chunk","data":{"sequence":4,"session_id":7,"text":"，再移项。"}},
+  {"event":"messages_saved","data":{"sequence":5,"session_id":7,"message_ids":[31,32]}},
+  {"event":"memory_extracted","data":{"sequence":6,"session_id":7,"written_count":1,"new_memories":[{"id":41,"content":"薄弱点：移项"}],"updated_memories":[],"suggestions":[]}},
+  {"event":"profile_updated","data":{"sequence":7,"session_id":7,"weaknesses":["移项"],"strengths":[]}},
+  {"event":"completed","data":{"sequence":8,"session_id":7,"response":"先画图，再移项。","message_ids":[31,32]}}
+]
