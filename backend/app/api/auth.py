@@ -23,7 +23,7 @@ class LoginRequest(BaseModel):
 
 
 def _user_payload(user: User) -> dict:
-    return {"id": user.id, "username": user.username}
+    return {"id": user.id, "username": user.username, "role": user.role}
 
 
 @router.post("/register")
@@ -76,3 +76,19 @@ def require_current_user_id(
     if not user_id:
         raise HTTPException(status_code=401, detail="未登录或登录已失效")
     return user_id
+
+
+def require_admin_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    db: Session = Depends(get_db),
+) -> int:
+    """要求有效管理员登录态。"""
+    user_id = decode_token(credentials.credentials) if credentials else None
+    if not user_id:
+        raise HTTPException(status_code=401, detail="未登录或登录已失效")
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    return user.id
