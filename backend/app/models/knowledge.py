@@ -1,7 +1,7 @@
 """知识点表 + 图谱边表 + 错题本（知识引擎，v0.3 启用，v0.1 先建表）"""
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -20,6 +20,21 @@ class KnowledgePoint(Base):
     slug: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
     content_md: Mapped[str | None] = mapped_column(Text, comment="知识点页面正文")
     difficulty: Mapped[str] = mapped_column(String(20), default="基础", comment="基础/进阶/拔高")
+    version_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("knowledge_versions.id", name="fk_knowledge_points_version"),
+        nullable=True,
+        index=True,
+    )
+    source_chunk_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("knowledge_source_chunks.id", name="fk_knowledge_points_source_chunk"),
+        nullable=True,
+    )
+    source_excerpt: Mapped[str | None] = mapped_column(Text)
+    provenance_gap: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     __table_args__ = (Index("idx_kp_subject", "subject", "grade"),)

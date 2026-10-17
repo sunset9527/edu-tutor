@@ -6,6 +6,18 @@ from app.models.memory import Memory, MemoryConflict, ReviewPlan
 from app.models.knowledge import KnowledgePoint, KnowledgePointLink, WrongQuestion
 from app.models.setting import SystemSetting
 from app.models.learning_event import LearningEvent
+from app.models.knowledge_governance import (
+    AnswerEvidenceLedger,
+    CorrectionTicket,
+    KnowledgeBuildEvent,
+    KnowledgeBuildTask,
+    KnowledgeBuildUnit,
+    KnowledgeReview,
+    KnowledgeReviewItem,
+    KnowledgeSourceChunk,
+    KnowledgeVersion,
+    Textbook,
+)
 
 __all__ = [
     "Student",
@@ -21,4 +33,14 @@ __all__ = [
     "WrongQuestion",
     "SystemSetting",
     "LearningEvent",
+    "Textbook",
+    "KnowledgeVersion",
+    "KnowledgeSourceChunk",
+    "KnowledgeBuildTask",
+    "KnowledgeBuildUnit",
+    "KnowledgeBuildEvent",
+    "KnowledgeReview",
+    "KnowledgeReviewItem",
+    "AnswerEvidenceLedger",
+    "CorrectionTicket",
 ]
