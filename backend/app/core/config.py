@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     # ---- Chroma（v0.2 记忆引擎用）----
     chroma_dir: str = "./data/chroma_db"
 
+    # ---- v1.7 教材治理 ----
+    textbook_storage_dir: str = "./data/textbooks"
+    textbook_max_file_bytes: int = 200 * 1024 * 1024
+    textbook_max_pages: int = 1000
+
     # ---- 记忆参数（v0.2 用）----
     working_memory_window_size: int = 10
     decay_stability: float = 7.0
