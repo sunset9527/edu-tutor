@@ -157,3 +157,61 @@ def reset_failed_units(db: Session, task_id: int) -> int:
     append_event(db, task, f"已重置 {len(units)} 个失败单元")
     db.commit()
     return len(units)
+
+
+def resume_task(db: Session, task_id: int, *, now: datetime) -> KnowledgeBuildTask:
+    """Make an interrupted task reclaimable without resetting completed units."""
+    task = db.get(KnowledgeBuildTask, task_id)
+    if not task:
+        raise ValueError("构建任务不存在")
+    if task.status == "queued":
+        return task
+    if task.status == "running":
+        if task.lease_expires_at and task.lease_expires_at >= now:
+            raise ValueError("任务仍由 worker 执行，不能续跑")
+        task.lease_owner = None
+        task.heartbeat_at = None
+        task.lease_expires_at = now - timedelta(microseconds=1)
+        append_event(db, task, "已请求从最近检查点续跑")
+        db.commit()
+        db.refresh(task)
+        return task
+    if task.status == "needs_attention":
+        failed_count = (
+            db.query(KnowledgeBuildUnit)
+            .filter(
+                KnowledgeBuildUnit.task_id == task.id,
+                KnowledgeBuildUnit.status == "failed",
+            )
+            .count()
+        )
+        if failed_count:
+            raise ValueError("存在失败单元，请使用失败重试")
+        transition_task(task, "queued", stage=None)
+        task.lease_owner = None
+        task.lease_expires_at = None
+        task.heartbeat_at = None
+        append_event(db, task, "已从最近检查点重新排队")
+        db.commit()
+        db.refresh(task)
+        return task
+    raise ValueError(f"任务状态 {task.status} 不允许续跑")
+
+
+def cancel_task(db: Session, task_id: int) -> KnowledgeBuildTask:
+    task = db.get(KnowledgeBuildTask, task_id)
+    if not task:
+        raise ValueError("构建任务不存在")
+    if task.status == "cancelled":
+        return task
+    if task.status not in {"queued", "running", "needs_attention"}:
+        raise ValueError(f"任务状态 {task.status} 不允许取消")
+    transition_task(task, "cancelled", stage=task.stage)
+    task.lease_owner = None
+    task.lease_expires_at = None
+    task.heartbeat_at = None
+    task.finished_at = datetime.now()
+    append_event(db, task, "管理员已请求取消构建")
+    db.commit()
+    db.refresh(task)
+    return task

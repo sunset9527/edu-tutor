@@ -1,34 +1,91 @@
 """PDF 文本提取（pymupdf）"""
 import logging
+from importlib.metadata import version
 
 import fitz
 
 logger = logging.getLogger(__name__)
 
 
-def extract_text_by_pages(pdf_path: str, use_ocr: bool = False) -> list[dict]:
-    """逐页提取文本；图片版 PDF 且 use_ocr=True 时逐页 OCR"""
+def extract_page_record(
+    pdf_path: str, page_number: int, use_ocr: bool = False
+) -> dict:
+    """提取单页记录；页码从 1 开始，供可恢复 worker 使用。"""
+    if page_number < 1:
+        raise ValueError("页码必须从 1 开始")
     if use_ocr:
         from app.services.knowledge.ocr import ocr_pdf
 
-        ocr_pages = ocr_pdf(pdf_path)
+        rows = ocr_pdf(pdf_path, start=page_number - 1, end=page_number)
+        text = rows[0].strip() if rows else ""
+        return {
+            "page": page_number,
+            "text": text,
+            "blocks": [],
+            "parse_method": "ocr",
+            "parser_version": f"rapidocr-onnxruntime-{version('rapidocr-onnxruntime')}",
+        }
+
+    document = fitz.open(pdf_path)
+    try:
+        if page_number > document.page_count:
+            raise ValueError("页码超过 PDF 总页数")
+        page = document[page_number - 1]
+        text = page.get_text().strip()
+        blocks = []
+        for block in page.get_text("blocks"):
+            block_text = str(block[4]).strip()
+            if block_text:
+                blocks.append(
+                    {
+                        "bbox": [float(value) for value in block[:4]],
+                        "text": block_text,
+                    }
+                )
+        return {
+            "page": page_number,
+            "text": text,
+            "blocks": blocks,
+            "parse_method": "text",
+            "parser_version": f"pymupdf-{fitz.VersionBind}",
+        }
+    finally:
+        document.close()
+
+
+def extract_page_records(pdf_path: str, use_ocr: bool = False) -> list[dict]:
+    """逐页提取可追溯文本，保留解析方式、版本和文字块坐标。"""
+    if use_ocr:
+        document = fitz.open(pdf_path)
+        try:
+            page_count = document.page_count
+        finally:
+            document.close()
         return [
-            {"page": i + 1, "text": t}
-            for i, t in enumerate(ocr_pages)
-            if t.strip()
+            record
+            for page_number in range(1, page_count + 1)
+            if (record := extract_page_record(pdf_path, page_number, use_ocr=True))["text"]
         ]
-    """提取每页文本，返回 [{page, text}]（跳过空页）"""
+
     doc = fitz.open(pdf_path)
-    pages = []
+    pages: list[dict] = []
     try:
         for i, page in enumerate(doc):
-            text = page.get_text().strip()
-            if text:
-                pages.append({"page": i + 1, "text": text})
+            record = extract_page_record(pdf_path, i + 1, use_ocr=False)
+            if record["text"]:
+                pages.append(record)
     finally:
         doc.close()
     logger.info(f"{pdf_path}: 共 {len(pages)} 页有文本")
     return pages
+
+
+def extract_text_by_pages(pdf_path: str, use_ocr: bool = False) -> list[dict]:
+    """兼容旧构建脚本，只返回页码与文本。"""
+    return [
+        {"page": row["page"], "text": row["text"]}
+        for row in extract_page_records(pdf_path, use_ocr=use_ocr)
+    ]
 
 
 def group_pages(pages: list[dict], group_size: int = 3) -> list[dict]:
