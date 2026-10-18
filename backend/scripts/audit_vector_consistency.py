@@ -11,7 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.database import SessionLocal  # noqa: E402
 from app.models.knowledge import KnowledgePoint  # noqa: E402
+from app.models.knowledge_governance import KnowledgeVersion, Textbook  # noqa: E402
 from app.models.memory import Memory  # noqa: E402
+from app.services.knowledge.chroma_client import get_knowledge_collection  # noqa: E402
 from app.services.memory.chroma_client import get_memory_collection  # noqa: E402
 from app.services.memory.storage import (  # noqa: E402
     MemoryStorage,
@@ -56,6 +58,48 @@ def build_consistency_report(
     }
 
 
+def _display_vector_id(value: str):
+    return int(value) if str(value).isdigit() else str(value)
+
+
+def build_knowledge_consistency_report(
+    mysql_points: list[dict], chroma_entries: dict[str, dict]
+) -> dict[str, list]:
+    """审计知识点向量是否完整携带教材、版本和来源 metadata。"""
+    points = {str(row["id"]): row for row in mysql_points}
+    point_ids = set(points)
+    vector_ids = set(chroma_entries)
+    metadata_errors = []
+    for point_id in sorted(point_ids & vector_ids, key=lambda value: int(value)):
+        row = points[point_id]
+        metadata = chroma_entries[point_id].get("metadata") or {}
+        if any(
+            metadata.get(field) != row.get(field)
+            for field in (
+                "textbook_id",
+                "version_id",
+                "source_chunk_id",
+                "subject",
+                "grade",
+            )
+        ):
+            metadata_errors.append(_display_vector_id(point_id))
+    return {
+        "missing_vector_ids": [
+            _display_vector_id(value)
+            for value in sorted(point_ids - vector_ids, key=lambda value: int(value))
+        ],
+        "orphan_vector_ids": [
+            _display_vector_id(value)
+            for value in sorted(
+                vector_ids - point_ids,
+                key=lambda value: (not str(value).isdigit(), str(value)),
+            )
+        ],
+        "metadata_error_ids": metadata_errors,
+    }
+
+
 def _snapshots(db, collection):
     memories = db.query(Memory).all()
     mysql_rows = [
@@ -82,14 +126,54 @@ def _snapshots(db, collection):
     return memories, mysql_rows, chroma_entries, valid_kp_ids
 
 
+def _knowledge_snapshots(db, collection):
+    rows = (
+        db.query(KnowledgePoint, KnowledgeVersion, Textbook)
+        .join(KnowledgeVersion, KnowledgeVersion.id == KnowledgePoint.version_id)
+        .join(Textbook, Textbook.id == KnowledgeVersion.textbook_id)
+        .all()
+    )
+    mysql_points = [
+        {
+            "id": point.id,
+            "textbook_id": textbook.id,
+            "version_id": version.id,
+            "source_chunk_id": point.source_chunk_id,
+            "subject": point.subject,
+            "grade": point.grade,
+        }
+        for point, version, textbook in rows
+    ]
+    raw = collection.get(include=["documents", "metadatas"])
+    ids = raw.get("ids") or []
+    documents = raw.get("documents") or []
+    metadatas = raw.get("metadatas") or []
+    entries = {
+        str(vector_id): {"document": document, "metadata": metadata or {}}
+        for vector_id, document, metadata in zip(ids, documents, metadatas)
+    }
+    return mysql_points, entries
+
+
 def audit(*, apply: bool = False) -> dict:
     db = SessionLocal()
     collection = get_memory_collection()
+    knowledge_collection = get_knowledge_collection()
     try:
         memories, mysql_rows, chroma_entries, valid_kp_ids = _snapshots(db, collection)
         report = build_consistency_report(mysql_rows, chroma_entries, valid_kp_ids)
+        knowledge_rows, knowledge_entries = _knowledge_snapshots(
+            db, knowledge_collection
+        )
+        knowledge_report = build_knowledge_consistency_report(
+            knowledge_rows, knowledge_entries
+        )
         if not apply:
-            return {"mode": "dry-run", **report}
+            return {
+                "mode": "dry-run",
+                **report,
+                "knowledge_vectors": knowledge_report,
+            }
 
         by_id = {memory.id: memory for memory in memories}
         for memory_id in report["missing_vector_ids"] + report["metadata_error_ids"]:
@@ -105,10 +189,16 @@ def audit(*, apply: bool = False) -> dict:
         db.commit()
 
         _, mysql_rows, chroma_entries, valid_kp_ids = _snapshots(db, collection)
+        knowledge_rows, knowledge_entries = _knowledge_snapshots(
+            db, knowledge_collection
+        )
         return {
             "mode": "apply",
             "before": report,
             "after": build_consistency_report(mysql_rows, chroma_entries, valid_kp_ids),
+            "knowledge_vectors": build_knowledge_consistency_report(
+                knowledge_rows, knowledge_entries
+            ),
         }
     except Exception:
         db.rollback()

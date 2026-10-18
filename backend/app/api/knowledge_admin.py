@@ -12,13 +12,26 @@ from app.models.knowledge_governance import (
     KnowledgeBuildEvent,
     KnowledgeBuildTask,
     KnowledgeBuildUnit,
+    KnowledgeReview,
+    KnowledgeReviewItem,
+    KnowledgeSourceChunk,
+    KnowledgeVersion,
     Textbook,
 )
+from app.models.knowledge import KnowledgePoint
 from app.services.knowledge.build_repository import (
     cancel_task,
     create_build_task,
     reset_failed_units,
     resume_task,
+)
+from app.services.knowledge.release_service import (
+    ReleaseConflictError,
+    ReleaseGateError,
+    ReleaseNotFoundError,
+    activate_version,
+    rollback_textbook,
+    submit_review,
 )
 from app.services.knowledge.textbook_service import (
     TextbookConflictError,
@@ -34,6 +47,30 @@ router = APIRouter(prefix="/api/admin", tags=["knowledge-admin"])
 class BuildCreateRequest(BaseModel):
     group_size: int = Field(default=12, ge=1, le=100)
     use_ocr: bool = False
+
+
+class ReviewItemRequest(BaseModel):
+    item_type: str = Field(min_length=1, max_length=30)
+    target_type: str = Field(default="version", min_length=1, max_length=30)
+    target_id: int | None = None
+    original_value: dict | None = None
+    conclusion: str = Field(pattern="^(pass|fail)$")
+    correction_note: str | None = None
+
+
+class ReviewRequest(BaseModel):
+    conclusion: str = Field(pattern="^(passed|rejected)$")
+    note: str | None = None
+    items: list[ReviewItemRequest] = Field(min_length=1)
+
+
+class ActivateRequest(BaseModel):
+    expected_active_version_id: int | None
+
+
+class RollbackRequest(BaseModel):
+    target_version_id: int
+    expected_active_version_id: int | None
 
 
 def _serialize_build(task: KnowledgeBuildTask, *, include_detail: bool = False, db=None):
@@ -94,6 +131,105 @@ def _serialize_build(task: KnowledgeBuildTask, *, include_detail: bool = False, 
             for row in events
         ]
     return payload
+
+
+def _serialize_version(version: KnowledgeVersion, *, db: Session):
+    points = (
+        db.query(KnowledgePoint)
+        .filter(KnowledgePoint.version_id == version.id)
+        .order_by(KnowledgePoint.id)
+        .all()
+    )
+    chunks = (
+        db.query(KnowledgeSourceChunk)
+        .filter(KnowledgeSourceChunk.version_id == version.id)
+        .order_by(KnowledgeSourceChunk.sequence)
+        .all()
+    )
+    reviews = (
+        db.query(KnowledgeReview)
+        .filter(KnowledgeReview.version_id == version.id)
+        .order_by(KnowledgeReview.id.desc())
+        .all()
+    )
+    review_payload = []
+    for review in reviews:
+        items = (
+            db.query(KnowledgeReviewItem)
+            .filter(KnowledgeReviewItem.review_id == review.id)
+            .order_by(KnowledgeReviewItem.id)
+            .all()
+        )
+        review_payload.append(
+            {
+                "id": review.id,
+                "reviewer_id": review.reviewer_id,
+                "conclusion": review.conclusion,
+                "note": review.note,
+                "created_at": review.created_at,
+                "items": [
+                    {
+                        "id": item.id,
+                        "item_type": item.item_type,
+                        "target_type": item.target_type,
+                        "target_id": item.target_id,
+                        "conclusion": item.conclusion,
+                        "correction_note": item.correction_note,
+                    }
+                    for item in items
+                ],
+            }
+        )
+    return {
+        "id": version.id,
+        "textbook_id": version.textbook_id,
+        "version_no": version.version_no,
+        "parent_version_id": version.parent_version_id,
+        "status": version.status,
+        "point_count": version.point_count,
+        "edge_count": version.edge_count,
+        "source_chunk_count": version.source_chunk_count,
+        "vector_count": version.vector_count,
+        "reviewed_by": version.reviewed_by,
+        "activated_by": version.activated_by,
+        "created_at": version.created_at,
+        "reviewed_at": version.reviewed_at,
+        "activated_at": version.activated_at,
+        "points": [
+            {
+                "id": point.id,
+                "title": point.title,
+                "chapter": point.chapter,
+                "difficulty": point.difficulty,
+                "source_chunk_id": point.source_chunk_id,
+                "provenance_gap": point.provenance_gap,
+            }
+            for point in points
+        ],
+        "source_chunks": [
+            {
+                "id": chunk.id,
+                "sequence": chunk.sequence,
+                "start_page": chunk.start_page,
+                "end_page": chunk.end_page,
+                "parse_method": chunk.parse_method,
+                "parser_version": chunk.parser_version,
+            }
+            for chunk in chunks
+        ],
+        "reviews": review_payload,
+    }
+
+
+def _raise_release_http(exc: Exception):
+    if isinstance(exc, ReleaseNotFoundError):
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if isinstance(exc, ReleaseGateError):
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "版本未通过发布门禁", "issues": exc.issues},
+        ) from exc
+    raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/textbooks", status_code=201)
@@ -245,3 +381,81 @@ def cancel_build(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _serialize_build(task)
+
+
+@router.get("/versions/{version_id}")
+def version_detail(
+    version_id: int,
+    db: Session = Depends(get_db),
+    _admin_id: int = Depends(require_admin_user_id),
+):
+    version = db.get(KnowledgeVersion, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="知识版本不存在")
+    return _serialize_version(version, db=db)
+
+
+@router.post("/versions/{version_id}/reviews", status_code=201)
+def review_version(
+    version_id: int,
+    request: ReviewRequest,
+    db: Session = Depends(get_db),
+    admin_id: int = Depends(require_admin_user_id),
+):
+    try:
+        review = submit_review(
+            db,
+            version_id=version_id,
+            reviewer_id=admin_id,
+            conclusion=request.conclusion,
+            note=request.note,
+            items=[item.model_dump() for item in request.items],
+        )
+    except (ReleaseNotFoundError, ReleaseConflictError, ReleaseGateError) as exc:
+        _raise_release_http(exc)
+    return {
+        "id": review.id,
+        "version_id": review.version_id,
+        "conclusion": review.conclusion,
+        "note": review.note,
+        "created_at": review.created_at,
+    }
+
+
+@router.post("/versions/{version_id}/activate")
+def activate_knowledge_version(
+    version_id: int,
+    request: ActivateRequest,
+    db: Session = Depends(get_db),
+    admin_id: int = Depends(require_admin_user_id),
+):
+    try:
+        version = activate_version(
+            db,
+            version_id=version_id,
+            admin_id=admin_id,
+            expected_active_version_id=request.expected_active_version_id,
+        )
+    except (ReleaseNotFoundError, ReleaseConflictError, ReleaseGateError) as exc:
+        _raise_release_http(exc)
+    return _serialize_version(version, db=db)
+
+
+@router.post("/textbooks/{textbook_id}/rollback")
+def rollback_knowledge_version(
+    textbook_id: int,
+    request: RollbackRequest,
+    db: Session = Depends(get_db),
+    admin_id: int = Depends(require_admin_user_id),
+):
+    try:
+        version = rollback_textbook(
+            db,
+            textbook_id=textbook_id,
+            target_version_id=request.target_version_id,
+            admin_id=admin_id,
+            expected_active_version_id=request.expected_active_version_id,
+        )
+    except (ReleaseNotFoundError, ReleaseConflictError, ReleaseGateError) as exc:
+        _raise_release_http(exc)
+    return _serialize_version(version, db=db)

@@ -97,6 +97,47 @@ def test_audit_detects_all_consistency_problem_types():
     assert report["invalid_knowledge_link_ids"] == [2]
 
 
+def test_audit_detects_versioned_knowledge_vector_metadata_problems():
+    audit = importlib.import_module("scripts.audit_vector_consistency")
+    mysql_points = [
+        {
+            "id": 101,
+            "textbook_id": 11,
+            "version_id": 21,
+            "source_chunk_id": 31,
+            "subject": "数学",
+            "grade": "初一",
+        },
+        {
+            "id": 102,
+            "textbook_id": 11,
+            "version_id": 21,
+            "source_chunk_id": 32,
+            "subject": "数学",
+            "grade": "初一",
+        },
+    ]
+    chroma_entries = {
+        "101": {
+            "document": "fixture",
+            "metadata": {
+                "textbook_id": 11,
+                "version_id": 999,
+                "source_chunk_id": 31,
+                "subject": "数学",
+                "grade": "初一",
+            },
+        },
+        "999": {"document": "orphan", "metadata": {}},
+    }
+
+    report = audit.build_knowledge_consistency_report(mysql_points, chroma_entries)
+
+    assert report["missing_vector_ids"] == [102]
+    assert report["orphan_vector_ids"] == [999]
+    assert report["metadata_error_ids"] == [101]
+
+
 def test_recompile_relinks_only_affected_memories():
     affected = [Memory(id=41), Memory(id=42)]
 
