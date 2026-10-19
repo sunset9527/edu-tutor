@@ -15,6 +15,7 @@ from app.models.student import StudentProfile
 from app.services.memory.extractor import MemoryExtractor
 from app.services.memory.retriever import MemoryRetriever
 from app.services.memory.storage import MemoryStorage
+from app.services.chat_orchestration import prepare_turn, record_answer_evidence
 
 
 def encode_sse(event: str, data: dict) -> str:
@@ -182,6 +183,8 @@ def stream_chat_events(
     message_saver=None,
     memory_processor=None,
     profile_loader=None,
+    knowledge_retriever=None,
+    evidence_recorder=None,
 ):
     """产生结构化事件；API 层仅负责编码为 SSE。"""
     sequence = 0
@@ -202,7 +205,13 @@ def stream_chat_events(
     yield event("generation_started")
     try:
         retriever = retriever or MemoryRetriever()
-        result = retriever.retrieve(student_id, user_message)
+        prepared = prepare_turn(
+            student_id=student_id,
+            user_message=user_message,
+            memory_retriever=retriever,
+            knowledge_retriever=knowledge_retriever,
+        )
+        result = prepared["memory_result"]
         selected = [
             row
             for row in result.get("trace", {}).get("candidates", [])
@@ -218,13 +227,23 @@ def stream_chat_events(
                 "trace": result.get("trace", {}),
             },
         )
+        knowledge_result = prepared["knowledge_result"]
+        yield event(
+            "knowledge_retrieved",
+            {
+                "active_version_ids": knowledge_result.get("active_version_ids", []),
+                "candidates": knowledge_result.get("candidates", []),
+                "retrieval_config": knowledge_result.get("retrieval_config", {}),
+                "evidence_gap": prepared["evidence_gap"],
+                "error": knowledge_result.get("error"),
+            },
+        )
 
         history_loader = history_loader or _load_recent_messages
         history = history_loader(session_id)
         system = SYSTEM_PROMPT
-        injection = retriever.build_injection_text(result)
-        if injection:
-            system += "\n\n以下是这个学生的长期记忆，请充分利用它提供个性化辅导：\n" + injection
+        if prepared["system_context"]:
+            system += "\n\n" + prepared["system_context"]
         messages = [SystemMessage(content=system), *history, HumanMessage(content=user_message)]
         llm = llm or create_llm(streaming=True)
         chunks: list[str] = []
@@ -238,6 +257,22 @@ def stream_chat_events(
         message_saver = message_saver or save_turn_messages
         message_ids = message_saver(session_id, user_message, response)
         yield event("messages_saved", {"message_ids": message_ids})
+
+        evidence_recorder = evidence_recorder or record_answer_evidence
+        ledger = evidence_recorder(
+            student_id=student_id,
+            session_id=session_id,
+            assistant_message_id=message_ids[-1],
+            prepared=prepared,
+        )
+        yield event(
+            "evidence_recorded",
+            {
+                "evidence_ledger_id": ledger["id"],
+                "assistant_message_id": message_ids[-1],
+                "evidence_gap": prepared["evidence_gap"],
+            },
+        )
 
         memory_processor = memory_processor or process_turn_memory
         memory_result = memory_processor(
@@ -254,7 +289,16 @@ def stream_chat_events(
         yield event("profile_updated", profile_loader(student_id))
         yield event(
             "completed",
-            {"response": response, "message_ids": message_ids},
+            {
+                "response": response,
+                "message_ids": message_ids,
+                "evidence_ledger_id": ledger["id"],
+                "evidence": {
+                    "knowledge": knowledge_result.get("candidates", []),
+                    "memory": ledger.get("memory_evidence", []),
+                    "gap": prepared["evidence_gap"],
+                },
+            },
         )
     except Exception as exc:  # noqa: BLE001
         yield event("failed", {"error": str(exc)})

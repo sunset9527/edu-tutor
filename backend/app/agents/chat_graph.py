@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.llm import create_llm
 from app.models.session import Message
+from app.services.chat_orchestration import prepare_turn, record_answer_evidence
 
 # 辅导老师角色（基础版；v0.2 起会动态拼接记忆上下文）
 SYSTEM_PROMPT = (
@@ -34,8 +35,10 @@ class ChatState(TypedDict):
     user_message: str
     history: list  # list[BaseMessage]
     memory_context: str  # 记忆注入文本
+    prepared_turn: dict
     ai_response: str
     saved_message_ids: list[int]
+    evidence_ledger: dict
 
 
 def _load_recent_messages(session_id: int) -> list:
@@ -66,13 +69,14 @@ def load_history_node(state: ChatState) -> ChatState:
 
 
 def retrieve_memory_node(state: ChatState) -> ChatState:
-    """节点 2：长期记忆多路召回，组装注入文本"""
-    from app.services.memory.retriever import MemoryRetriever
-
-    retriever = MemoryRetriever()
-    result = retriever.retrieve(state["student_id"], state["user_message"])
-    injection = retriever.build_injection_text(result)
-    return {"memory_context": injection}
+    """节点 2：共享准备器召回长期记忆与 active 教材知识。"""
+    prepared = prepare_turn(
+        student_id=state["student_id"], user_message=state["user_message"]
+    )
+    return {
+        "memory_context": prepared["system_context"],
+        "prepared_turn": prepared,
+    }
 
 
 def generate_node(state: ChatState) -> ChatState:
@@ -80,7 +84,7 @@ def generate_node(state: ChatState) -> ChatState:
     llm = create_llm()
     system = SYSTEM_PROMPT
     if state.get("memory_context"):
-        system = SYSTEM_PROMPT + "\n\n以下是这个学生的长期记忆，请充分利用它提供个性化辅导：\n" + state["memory_context"]
+        system = SYSTEM_PROMPT + "\n\n" + state["memory_context"]
 
     messages = (
         [SystemMessage(content=system)]
@@ -115,14 +119,15 @@ def save_messages_node(state: ChatState) -> ChatState:
 def extract_memory_node(state: ChatState) -> ChatState:
     """节点 5：对话后提取长期记忆并双写存储（v0.2 核心）"""
     from app.services.memory.extractor import MemoryExtractor
-    from app.services.memory.retriever import MemoryRetriever
     from app.services.memory.storage import MemoryStorage
 
     try:
         # 传入画像摘要，避免重复提取已有信息
-        profile_summary = MemoryRetriever().retrieve(
-            state["student_id"], state["user_message"]
-        )["profile_summary"]
+        profile_summary = (
+            state.get("prepared_turn", {})
+            .get("memory_result", {})
+            .get("profile_summary", "")
+        )
 
         extractor = MemoryExtractor()
         items = extractor.extract(
@@ -147,6 +152,20 @@ def extract_memory_node(state: ChatState) -> ChatState:
     return {}
 
 
+def record_evidence_node(state: ChatState) -> ChatState:
+    """节点 5：把本轮检索候选与采用结果冻结为不可变账本。"""
+    message_ids = state.get("saved_message_ids") or []
+    if not message_ids:
+        raise ValueError("回答消息尚未保存，不能记录证据")
+    ledger = record_answer_evidence(
+        student_id=state["student_id"],
+        session_id=state["session_id"],
+        assistant_message_id=message_ids[-1],
+        prepared=state["prepared_turn"],
+    )
+    return {"evidence_ledger": ledger}
+
+
 @lru_cache(maxsize=1)
 def build_chat_graph():
     """构建工作流；可恢复状态只从 MySQL 消息表读取。"""
@@ -155,18 +174,20 @@ def build_chat_graph():
     graph.add_node("retrieve_memory", retrieve_memory_node)
     graph.add_node("generate", generate_node)
     graph.add_node("save_messages", save_messages_node)
+    graph.add_node("record_evidence", record_evidence_node)
     graph.add_node("extract_memory", extract_memory_node)
     graph.add_edge(START, "load_history")
     graph.add_edge("load_history", "retrieve_memory")
     graph.add_edge("retrieve_memory", "generate")
     graph.add_edge("generate", "save_messages")
-    graph.add_edge("save_messages", "extract_memory")
+    graph.add_edge("save_messages", "record_evidence")
+    graph.add_edge("record_evidence", "extract_memory")
     graph.add_edge("extract_memory", END)
     return graph.compile()
 
 
-def run_chat(student_id: int, session_id: int, user_message: str) -> str:
-    """执行对话，返回 AI 回复"""
+def run_chat(student_id: int, session_id: int, user_message: str) -> dict:
+    """执行非流式对话，返回兼容正文以及与流式一致的证据。"""
     result = build_chat_graph().invoke(
         {
             "student_id": student_id,
@@ -174,4 +195,15 @@ def run_chat(student_id: int, session_id: int, user_message: str) -> str:
             "user_message": user_message,
         }
     )
-    return result["ai_response"]
+    prepared = result["prepared_turn"]
+    ledger = result["evidence_ledger"]
+    return {
+        "response": result["ai_response"],
+        "assistant_message_id": result["saved_message_ids"][-1],
+        "evidence_ledger_id": ledger["id"],
+        "evidence": {
+            "knowledge": prepared["knowledge_result"].get("candidates", []),
+            "memory": ledger.get("memory_evidence", []),
+            "gap": prepared["evidence_gap"],
+        },
+    }

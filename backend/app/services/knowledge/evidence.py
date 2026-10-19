@@ -6,6 +6,7 @@ GAP_MESSAGES = {
     "below_similarity_threshold": "当前教材知识库没有达到相似度门槛的内容。",
     "missing_content": "命中的知识点缺少可用于回答的正文。",
     "legacy_provenance_gap": "命中内容来自历史导入知识，缺少可核验的教材页来源。",
+    "knowledge_retrieval_failed": "教材知识检索暂时不可用。",
 }
 
 

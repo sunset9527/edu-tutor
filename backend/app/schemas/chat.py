@@ -11,3 +11,6 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     session_id: int
     response: str
+    assistant_message_id: int
+    evidence_ledger_id: int
+    evidence: dict

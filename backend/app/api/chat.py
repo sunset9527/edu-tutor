@@ -14,6 +14,7 @@ from app.models.student import Student
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.memory.session_lifecycle import end_session_with_summary
 from app.services.chat_stream import encode_sse, stream_chat_events
+from app.services.chat_orchestration import get_answer_evidence
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -48,8 +49,12 @@ def chat(
 
     session_id = _resolve_session(db, student, payload.session_id, user_id)
 
-    response = run_chat(student_id=student.id, session_id=session_id, user_message=payload.message)
-    return ChatResponse(session_id=session_id, response=response)
+    result = run_chat(
+        student_id=student.id,
+        session_id=session_id,
+        user_message=payload.message,
+    )
+    return ChatResponse(session_id=session_id, **result)
 
 
 @router.post("/chat/stream")
@@ -114,6 +119,22 @@ def session_messages(
             for row in rows
         ],
     }
+
+
+@router.get("/knowledge/evidence/{assistant_message_id}")
+def answer_evidence(
+    assistant_message_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_current_user_id),
+):
+    message = db.get(Message, assistant_message_id)
+    if not message or message.role != "assistant":
+        raise HTTPException(status_code=404, detail="回答证据不存在")
+    get_owned_session(db, message.session_id, user_id)
+    evidence = get_answer_evidence(db, assistant_message_id)
+    if not evidence:
+        raise HTTPException(status_code=404, detail="回答证据不存在")
+    return evidence
 
 
 @router.post("/sessions/{session_id}/end")
