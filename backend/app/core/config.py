@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     textbook_storage_dir: str = "./data/textbooks"
     textbook_max_file_bytes: int = 200 * 1024 * 1024
     textbook_max_pages: int = 1000
+    knowledge_retrieval_top_k: int = 5
+    knowledge_similarity_threshold: float = 0.55
 
     # ---- 记忆参数（v0.2 用）----
     working_memory_window_size: int = 10

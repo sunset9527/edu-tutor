@@ -377,7 +377,11 @@ class MemoryStorage:
             ids = (hits.get("ids") or [[]])[0]
             distances = (hits.get("distances") or [[]])[0]
             if ids and distances and distances[0] < 0.45:  # 余弦距离 → 相似度 > 0.55
-                memory.knowledge_point_id = int(ids[0])
+                from app.models.knowledge import KnowledgePoint
+
+                point_id = int(ids[0])
+                if db.get(KnowledgePoint, point_id) is not None:
+                    memory.knowledge_point_id = point_id
         except Exception as e:  # noqa: BLE001
             logger.debug(f"知识点关联跳过: {e}")
 

@@ -4,7 +4,9 @@ import importlib
 
 from app.models.memory import Memory
 from app.services.knowledge import graph_service
+from app.services.knowledge import chroma_client as knowledge_chroma
 from app.services.memory import storage
+from app.core import embeddings
 
 
 class FakeCollection:
@@ -51,6 +53,32 @@ def test_delete_memory_vector_uses_memory_id():
     storage.delete_memory_vector(31, collection=collection)
 
     assert collection.deletes == [{"ids": ["31"]}]
+
+
+def test_memory_link_ignores_orphan_knowledge_vector(monkeypatch):
+    class OrphanCollection:
+        @staticmethod
+        def count():
+            return 1
+
+        @staticmethod
+        def query(**_kwargs):
+            return {"ids": [["999999"]], "distances": [[0.1]]}
+
+    class EmptyDatabase:
+        @staticmethod
+        def get(_model, _row_id):
+            return None
+
+    monkeypatch.setattr(
+        knowledge_chroma, "get_knowledge_collection", lambda: OrphanCollection()
+    )
+    monkeypatch.setattr(embeddings, "embed_query", lambda _text: [0.0])
+    memory = Memory(content="一次方程", knowledge_point_id=None)
+
+    storage.MemoryStorage()._link_knowledge_point(EmptyDatabase(), memory)
+
+    assert memory.knowledge_point_id is None
 
 
 def test_audit_detects_all_consistency_problem_types():
