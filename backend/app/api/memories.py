@@ -10,6 +10,7 @@ from app.api.auth import require_current_user_id
 from app.core.database import get_db
 from app.models.memory import Memory, ReviewPlan
 from app.services.memory.forgetting import ReviewScheduler
+from app.services.memory.editor import MemoryEditError, edit_memory
 from app.services.memory.storage import delete_memory_vector, upsert_memory_vector
 from app.services.learning_events import add_learning_event
 
@@ -138,41 +139,9 @@ def update_memory(
 ):
     """编辑记忆内容/掌握度/状态（人工纠错闭环）"""
     memory = get_owned_memory(db, memory_id, user_id)
-    old = SimpleNamespace(
-        id=memory.id,
-        student_id=memory.student_id,
-        memory_type=memory.memory_type,
-        content=memory.content,
-        structured_data=dict(memory.structured_data or {}),
-        status=memory.status,
-    )
-    vector_changed = False
-    if payload.content is not None:
-        memory.content = payload.content
-        vector_changed = payload.content != old.content
-    if payload.mastery is not None:
-        memory.mastery = payload.mastery
-    if payload.status is not None:
-        memory.status = payload.status
-        vector_changed = vector_changed or payload.status != old.status
-
     try:
-        if vector_changed:
-            if memory.status == "active":
-                upsert_memory_vector(memory)
-            else:
-                delete_memory_vector(memory.id)
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        try:
-            if vector_changed:
-                if old.status == "active":
-                    upsert_memory_vector(old)
-                else:
-                    delete_memory_vector(old.id)
-        except Exception:
-            pass
+        edit_memory(db, memory, payload.model_dump(exclude_none=True))
+    except MemoryEditError as exc:
         raise HTTPException(status_code=503, detail="记忆与向量同步失败") from exc
     return {"ok": True, "id": memory.id, "status": memory.status}
 

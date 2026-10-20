@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.auth import require_admin_user_id
 from app.core.database import get_db
 from app.models.knowledge_governance import (
+    CorrectionTicket,
     KnowledgeBuildEvent,
     KnowledgeBuildTask,
     KnowledgeBuildUnit,
@@ -24,6 +25,14 @@ from app.services.knowledge.build_repository import (
     create_build_task,
     reset_failed_units,
     resume_task,
+)
+from app.services.knowledge.correction_service import (
+    CorrectionApplyError,
+    CorrectionConflictError,
+    CorrectionNotFoundError,
+    accept_ticket,
+    reject_ticket,
+    serialize_ticket,
 )
 from app.services.knowledge.release_service import (
     ReleaseConflictError,
@@ -71,6 +80,10 @@ class ActivateRequest(BaseModel):
 class RollbackRequest(BaseModel):
     target_version_id: int
     expected_active_version_id: int | None
+
+
+class CorrectionDecisionRequest(BaseModel):
+    note: str = Field(min_length=1, max_length=4000)
 
 
 def _serialize_build(task: KnowledgeBuildTask, *, include_detail: bool = False, db=None):
@@ -459,3 +472,61 @@ def rollback_knowledge_version(
     except (ReleaseNotFoundError, ReleaseConflictError, ReleaseGateError) as exc:
         _raise_release_http(exc)
     return _serialize_version(version, db=db)
+
+
+@router.get("/corrections")
+def list_corrections(
+    status: str | None = None,
+    category: str | None = None,
+    db: Session = Depends(get_db),
+    _admin_id: int = Depends(require_admin_user_id),
+):
+    query = db.query(CorrectionTicket)
+    if status:
+        query = query.filter(CorrectionTicket.status == status)
+    if category:
+        query = query.filter(CorrectionTicket.category == category)
+    rows = query.order_by(CorrectionTicket.id.desc()).all()
+    return {"items": [serialize_ticket(row) for row in rows], "total": len(rows)}
+
+
+@router.post("/corrections/{ticket_id}/accept")
+def accept_correction(
+    ticket_id: int,
+    request: CorrectionDecisionRequest,
+    db: Session = Depends(get_db),
+    admin_id: int = Depends(require_admin_user_id),
+):
+    try:
+        ticket = accept_ticket(
+            db,
+            ticket_id=ticket_id,
+            admin_id=admin_id,
+            note=request.note,
+        )
+    except CorrectionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (CorrectionConflictError, CorrectionApplyError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return serialize_ticket(ticket)
+
+
+@router.post("/corrections/{ticket_id}/reject")
+def reject_correction(
+    ticket_id: int,
+    request: CorrectionDecisionRequest,
+    db: Session = Depends(get_db),
+    admin_id: int = Depends(require_admin_user_id),
+):
+    try:
+        ticket = reject_ticket(
+            db,
+            ticket_id=ticket_id,
+            admin_id=admin_id,
+            note=request.note,
+        )
+    except CorrectionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CorrectionConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return serialize_ticket(ticket)
