@@ -16,9 +16,18 @@ class QueryCollection:
 
     def query(self, **_kwargs):
         return {
-            "ids": [[str(row.id) for row in self.memories]],
-            "documents": [[row.content for row in self.memories]],
-            "distances": [[0.1, 0.2]],
+            # 模拟 Chroma 在重复向量 + metadata filter 下漏掉一个合法 ID。
+            "ids": [[str(self.memories[0].id)]],
+            "documents": [[self.memories[0].content]],
+            "distances": [[0.1]],
+        }
+
+    def get(self, *, ids, include=None):
+        rows = [row for row in self.memories if str(row.id) in ids]
+        return {
+            "ids": [str(row.id) for row in rows],
+            "documents": [row.content for row in rows],
+            "embeddings": [[0.8, 0.6] for _row in rows],
         }
 
 
@@ -61,7 +70,7 @@ def test_trace_contains_scores_rank_rejection_and_updates_access(monkeypatch):
     db.close()
 
     try:
-        monkeypatch.setattr(retriever_module, "embed_query", lambda _query: [0.0])
+        monkeypatch.setattr(retriever_module, "embed_query", lambda _query: [1.0, 0.0])
         monkeypatch.setattr(
             retriever_module.settings_service,
             "get_int",

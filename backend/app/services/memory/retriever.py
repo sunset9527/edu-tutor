@@ -68,6 +68,19 @@ def recency_score(
     return math.exp(-days / max(0.001, decay_days))
 
 
+def cosine_distance(left, right) -> float:
+    """计算余弦距离；用于补齐 Chroma metadata 过滤偶发漏召回。"""
+    if left is None or right is None or len(left) != len(right) or len(left) == 0:
+        return 1.0
+    dot = sum(float(a) * float(b) for a, b in zip(left, right))
+    left_norm = math.sqrt(sum(float(value) ** 2 for value in left))
+    right_norm = math.sqrt(sum(float(value) ** 2 for value in right))
+    if left_norm == 0 or right_norm == 0:
+        return 1.0
+    similarity = max(-1.0, min(1.0, dot / (left_norm * right_norm)))
+    return 1.0 - similarity
+
+
 class MemoryRetriever:
     def __init__(self, *, collection=None, session_factory=SessionLocal, now_factory=datetime.now):
         self.collection = collection or get_memory_collection()
@@ -195,6 +208,7 @@ class MemoryRetriever:
             "applied_weights": weights,
             "recency_decay_days": decay_days,
             "candidates": [],
+            "supplemented_candidate_count": 0,
             "error": None,
         }
         try:
@@ -207,6 +221,48 @@ class MemoryRetriever:
             docs = (hits.get("documents") or [[]])[0] or []
             ids = (hits.get("ids") or [[]])[0] or []
             distances = (hits.get("distances") or [[]])[0] or []
+
+            # Chroma HNSW 在大量重复向量叠加 metadata filter 时，可能漏掉
+            # 同一学生的合法 ID。用 MySQL active 集合作为真值，仅对漏项做精确补齐。
+            lookup_db = self.session_factory()
+            try:
+                active_ids = [
+                    row[0]
+                    for row in lookup_db.query(Memory.id)
+                    .filter(
+                        Memory.student_id == student_id,
+                        Memory.status == "active",
+                    )
+                    .all()
+                ]
+            finally:
+                lookup_db.close()
+            returned_ids = {str(value) for value in ids}
+            missing_ids = [
+                str(value) for value in active_ids if str(value) not in returned_ids
+            ]
+            if missing_ids and hasattr(self.collection, "get"):
+                missing = self.collection.get(
+                    ids=missing_ids,
+                    include=["documents", "embeddings"],
+                )
+                missing_embeddings = missing.get("embeddings")
+                if missing_embeddings is None:
+                    missing_embeddings = []
+                added = 0
+                for mem_id, document, embedding in zip(
+                    missing.get("ids") or [],
+                    missing.get("documents") or [],
+                    missing_embeddings,
+                ):
+                    if str(mem_id) in returned_ids:
+                        continue
+                    ids.append(str(mem_id))
+                    docs.append(document)
+                    distances.append(cosine_distance(query_emb, embedding))
+                    returned_ids.add(str(mem_id))
+                    added += 1
+                trace["supplemented_candidate_count"] = added
 
             scored: list[dict] = []
             db = self.session_factory()
