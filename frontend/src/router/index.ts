@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import AppLayout from '../components/AppLayout.vue'
+import { readStoredUser, resolveRouteAccess } from './adminAccess'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -17,6 +19,12 @@ const router = createRouter({
         { path: 'graph', name: 'graph', component: () => import('../views/GraphView.vue') },
         { path: 'report', name: 'report', component: () => import('../views/ReportView.vue') },
         { path: 'settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
+        {
+          path: 'admin/knowledge',
+          name: 'knowledge-admin',
+          meta: { requiresAdmin: true },
+          component: () => import('../views/KnowledgeAdminView.vue'),
+        },
       ],
     },
   ],
@@ -25,9 +33,15 @@ const router = createRouter({
 // 路由守卫：未登录跳 /login
 router.beforeEach((to) => {
   const token = localStorage.getItem('edututor_token')
-  if (to.path !== '/login' && !token) return '/login'
-  if (to.path === '/login' && token) return '/chat'
-  return true
+  const result = resolveRouteAccess(
+    { path: to.path, requiresAdmin: Boolean(to.meta.requiresAdmin) },
+    token || '',
+    readStoredUser(),
+  )
+  if (result === '/chat' && to.meta.requiresAdmin) {
+    ElMessage.warning('当前账号没有教材治理权限')
+  }
+  return result
 })
 
 export default router

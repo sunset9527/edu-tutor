@@ -5,6 +5,7 @@ import client from '../api/client'
 export interface AuthUser {
   id: number
   username: string
+  role: 'user' | 'admin'
 }
 
 export const useAuthStore = defineStore('auth', () => {

@@ -1,7 +1,11 @@
 <template>
   <el-container class="app-layout">
     <el-aside width="220px" class="app-aside">
-      <div class="logo">🎓 EduTutor</div>`n      <div class="user-bar" v-if="auth.user">`n        <span class="user-name">{{ auth.user.username }}</span>`n        <el-button size="small" text type="danger" @click="logout">退出</el-button>`n      </div>
+      <div class="logo">EduTutor</div>
+      <div v-if="auth.user" class="user-bar">
+        <span class="user-name">{{ auth.user.username }}</span>
+        <el-button size="small" text type="danger" @click="logout">退出</el-button>
+      </div>
       <el-menu :default-active="activeMenu" router class="app-menu">
         <el-menu-item index="/chat">
           <el-icon><ChatDotRound /></el-icon>
@@ -31,6 +35,10 @@
           <el-icon><Setting /></el-icon>
           <span>系统设置</span>
         </el-menu-item>
+        <el-menu-item v-if="auth.user?.role === 'admin'" index="/admin/knowledge">
+          <el-icon><Management /></el-icon>
+          <span>教材治理</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-main class="app-main">
@@ -42,7 +50,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { ChatDotRound, User, Memo, Share, DataAnalysis, Setting, EditPen } from '@element-plus/icons-vue'
+import { ChatDotRound, User, Memo, Share, DataAnalysis, Setting, EditPen, Management } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
