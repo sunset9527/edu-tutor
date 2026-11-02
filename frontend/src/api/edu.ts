@@ -33,6 +33,27 @@ export interface MemoryPage {
 export interface ChatResponse {
   session_id: number
   response: string
+  assistant_message_id: number
+  evidence_ledger_id: number
+  evidence: AnswerEvidence
+}
+
+export interface KnowledgeEvidence {
+  knowledge_point_id: number
+  title: string
+  version_id?: number
+  version_no?: number
+  page_range?: [number | null, number | null] | null
+  similarity?: number
+  adopted?: boolean
+  legacy?: boolean
+  textbook?: { filename?: string; publisher?: string; edition?: string; volume?: string } | string
+}
+
+export interface AnswerEvidence {
+  knowledge: KnowledgeEvidence[]
+  memory?: unknown[]
+  gap: { evidence_gap?: boolean; messages?: string[]; reasons?: string[] }
 }
 
 export interface ReviewPlan {
@@ -131,6 +152,14 @@ export interface SessionMessage {
   created_at?: string | null
 }
 
+export interface CorrectionCreate {
+  assistant_message_id: number
+  category: 'knowledge' | 'question' | 'explanation' | 'memory'
+  target_id?: number
+  proposed_value?: Record<string, unknown>
+  reason: string
+}
+
 export interface QuizGenerateRequest {
   student_id: number
   subject: string
@@ -186,6 +215,10 @@ export const eduApi = {
       .then((r) => r.data),
   endSession: (sessionId: number) =>
     client.post(`/sessions/${sessionId}/end`).then((r) => r.data),
+  getAnswerEvidence: (assistantMessageId: number) =>
+    client.get<{ id: number; knowledge_evidence: KnowledgeEvidence[]; memory_evidence: unknown[]; evidence_gap: AnswerEvidence['gap'] }>(`/knowledge/evidence/${assistantMessageId}`).then((r) => r.data),
+  submitCorrection: (data: CorrectionCreate) =>
+    client.post('/corrections', data).then((r) => r.data),
 
   // 复习
   reviewMemory: (memory_id: number, success: boolean) =>
