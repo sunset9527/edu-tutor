@@ -17,3 +17,6 @@
 - RED：新增追加版本测试因缺少 `append_learning_goal_version` 导入失败，符合预期；当前实现最小追加版本服务。
 - GREEN：`python -m pytest tests/test_v18_goals.py -q` 通过（1 passed），确认目标修改追加新版本且原版本不变。
 - 下一步：补齐学习目标 API 归属校验，再进入诊断题与诊断会话模型。
+- RED：学习目标读取接口不存在，本人请求得到 404。
+- GREEN：新增 `GET /api/learning/goals/{student_id}`，复用 `get_owned_student`；本人读取为 200，其他账号为 404，目标集成测试通过。
+- 下一步：为目标创建与版本更新补齐写入 API，然后开始诊断领域模型。

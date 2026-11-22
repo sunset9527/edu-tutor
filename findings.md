@@ -37,3 +37,4 @@
 - 领域服务会提交事务，因此集成测试不能仅对同一 session 调用 `rollback()`；必须显式删除已提交夹具。
 - `learning_goals.current_version_id` 与 `learning_goal_versions` 是循环引用，数据清理顺序为：先清空 current 指针，再删 targets、versions、goals。
 - 目标版本追加可安全复制上一版本的 `knowledge_version_id`、学科、目标水平和目标知识点；目标日期、每周时间、状态与调整原因是本次变更字段。
+- `GET /api/learning/goals/{student_id}` 已由既有学生归属校验保护；所有后续学习 API 应在任何资源查询前调用同一校验。

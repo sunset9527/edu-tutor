@@ -9,6 +9,7 @@ from app.api import (
     corrections,
     knowledge,
     knowledge_admin,
+    learning,
     memories,
     quiz,
     settings_api,
@@ -39,6 +40,7 @@ app.include_router(settings_api.router)
 app.include_router(quiz.router)
 app.include_router(knowledge_admin.router)
 app.include_router(corrections.router)
+app.include_router(learning.router)
 
 
 @app.get("/health")

@@ -3,7 +3,11 @@
 from datetime import date, timedelta
 import uuid
 
+from fastapi.testclient import TestClient
+
+from app.core.security import create_token
 from app.core.database import SessionLocal
+from app.main import app
 from app.models.knowledge import KnowledgePoint
 from app.models.knowledge_governance import KnowledgeSourceChunk, KnowledgeVersion, Textbook
 from app.models.learning import LearningGoal, LearningGoalTarget, LearningGoalVersion
@@ -12,10 +16,14 @@ from app.models.user import User
 from app.services.learning_goals import append_learning_goal_version, create_learning_goal
 
 
+client = TestClient(app)
+
+
 def test_creating_goal_pins_active_knowledge_version_and_first_version():
     token = uuid.uuid4().hex[:10]
     db = SessionLocal()
     user = User(username=f"v18-goal-{token}", password_hash="fixture")
+    other_user = User(username=f"v18-other-{token}", password_hash="fixture")
     textbook = Textbook(
         identity_key=f"v18-goal:{token}",
         grade="二年级",
@@ -24,7 +32,7 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
     )
     student = Student(name=f"v18-goal-{token}", grade="二年级", subject="数学")
     try:
-        db.add_all([user, textbook, student])
+        db.add_all([user, other_user, textbook, student])
         db.flush()
         student.user_id = user.id
         version = KnowledgeVersion(
@@ -92,6 +100,18 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
             (1, 120, "active"),
             (2, 180, "paused"),
         ]
+
+        own = client.get(
+            f"/api/learning/goals/{student.id}",
+            headers={"Authorization": f"Bearer {create_token(user.id)}"},
+        )
+        assert own.status_code == 200
+        assert own.json()["current_version"]["version_no"] == 2
+        foreign = client.get(
+            f"/api/learning/goals/{student.id}",
+            headers={"Authorization": f"Bearer {create_token(other_user.id)}"},
+        )
+        assert foreign.status_code == 404
     finally:
         db.rollback()
         db.query(LearningGoal).filter(LearningGoal.student_id == student.id).update(
@@ -127,5 +147,6 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         db.query(Textbook).filter(Textbook.id == textbook.id).delete(synchronize_session=False)
         db.query(Student).filter(Student.id == student.id).delete(synchronize_session=False)
         db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == other_user.id).delete(synchronize_session=False)
         db.commit()
         db.close()
