@@ -9,7 +9,7 @@ from app.models.knowledge_governance import KnowledgeSourceChunk, KnowledgeVersi
 from app.models.learning import LearningGoal, LearningGoalTarget, LearningGoalVersion
 from app.models.student import Student
 from app.models.user import User
-from app.services.learning_goals import create_learning_goal
+from app.services.learning_goals import append_learning_goal_version, create_learning_goal
 
 
 def test_creating_goal_pins_active_knowledge_version_and_first_version():
@@ -75,6 +75,23 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         assert goal.current_version.knowledge_version_id == version.id
         assert [item.knowledge_point_id for item in goal.current_version.targets] == [target.id]
         assert goal.current_version.status == "active"
+
+        updated = append_learning_goal_version(
+            db,
+            goal_id=goal.id,
+            target_date=date.today() + timedelta(days=42),
+            weekly_minutes=180,
+            status="paused",
+            change_reason="paused",
+        )
+
+        assert updated.current_version_no == 2
+        assert updated.current_version.status == "paused"
+        assert updated.current_version.weekly_minutes == 180
+        assert [(row.version_no, row.weekly_minutes, row.status) for row in updated.versions] == [
+            (1, 120, "active"),
+            (2, 180, "paused"),
+        ]
     finally:
         db.rollback()
         db.query(LearningGoal).filter(LearningGoal.student_id == student.id).update(

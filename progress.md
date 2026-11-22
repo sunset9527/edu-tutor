@@ -14,3 +14,6 @@
 - 清理第一次未提交：`learning_goals.current_version_id` 仍指向版本，先清空该指针再删除目标版本。
 - 修正后已清除首轮遗留夹具，并复跑 `python -m pytest tests/test_v18_goals.py -q`：1 passed。
 - 当前：检查第一批改动并提交；下一条 RED 测试覆盖目标版本追加（修改/暂停/恢复/结束）。
+- RED：新增追加版本测试因缺少 `append_learning_goal_version` 导入失败，符合预期；当前实现最小追加版本服务。
+- GREEN：`python -m pytest tests/test_v18_goals.py -q` 通过（1 passed），确认目标修改追加新版本且原版本不变。
+- 下一步：补齐学习目标 API 归属校验，再进入诊断题与诊断会话模型。

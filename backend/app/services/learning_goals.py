@@ -83,3 +83,52 @@ def create_learning_goal(
     db.commit()
     db.refresh(goal)
     return goal
+
+
+def append_learning_goal_version(
+    db: Session,
+    *,
+    goal_id: int,
+    target_date: date | None = None,
+    weekly_minutes: int | None = None,
+    status: str | None = None,
+    change_reason: str,
+) -> LearningGoal:
+    """追加学习目标版本，永不原地覆盖历史版本。"""
+    goal = db.get(LearningGoal, goal_id)
+    if goal is None or goal.current_version is None:
+        raise ValueError("学习目标不存在或缺少当前版本")
+    previous = goal.current_version
+    next_target_date = target_date or previous.target_date
+    next_weekly_minutes = weekly_minutes if weekly_minutes is not None else previous.weekly_minutes
+    if next_target_date <= date.today():
+        raise ValueError("目标日期必须晚于今天")
+    if next_weekly_minutes <= 0:
+        raise ValueError("每周可投入时间必须大于 0")
+
+    next_version = LearningGoalVersion(
+        goal_id=goal.id,
+        version_no=previous.version_no + 1,
+        knowledge_version_id=previous.knowledge_version_id,
+        target_date=next_target_date,
+        weekly_minutes=next_weekly_minutes,
+        subject=previous.subject,
+        target_level=previous.target_level,
+        status=status or previous.status,
+        change_reason=change_reason,
+    )
+    db.add(next_version)
+    db.flush()
+    db.add_all(
+        [
+            LearningGoalTarget(
+                goal_version_id=next_version.id,
+                knowledge_point_id=target.knowledge_point_id,
+            )
+            for target in previous.targets
+        ]
+    )
+    goal.current_version_id = next_version.id
+    db.commit()
+    db.refresh(goal)
+    return goal
