@@ -2,6 +2,8 @@
 
 import importlib
 
+import numpy as np
+
 from app.models.memory import Memory
 from app.services.knowledge import graph_service
 from app.services.knowledge import chroma_client as knowledge_chroma
@@ -164,6 +166,30 @@ def test_audit_detects_versioned_knowledge_vector_metadata_problems():
     assert report["missing_vector_ids"] == [102]
     assert report["orphan_vector_ids"] == [999]
     assert report["metadata_error_ids"] == [101]
+
+
+def test_audit_backup_normalizes_numpy_embeddings_for_json():
+    audit = importlib.import_module("scripts.audit_vector_consistency")
+
+    assert audit.json_safe({"embeddings": [np.array([0.25, 0.5])]}) == {
+        "embeddings": [[0.25, 0.5]]
+    }
+
+
+def test_audit_keeps_numpy_embeddings_without_boolean_coercion():
+    audit = importlib.import_module("scripts.audit_vector_consistency")
+    embeddings = np.array([[0.25, 0.5]])
+
+    assert audit.sequence_or_empty(embeddings).tolist() == [[0.25, 0.5]]
+
+
+def test_audit_normalizes_mixed_embeddings_to_plain_lists():
+    audit = importlib.import_module("scripts.audit_vector_consistency")
+
+    assert audit.normalize_embedding_batch([[0.1, 0.2], np.array([0.3, 0.4])]) == [
+        [0.1, 0.2],
+        [0.3, 0.4],
+    ]
 
 
 def test_recompile_relinks_only_affected_memories():
