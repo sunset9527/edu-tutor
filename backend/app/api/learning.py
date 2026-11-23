@@ -1,6 +1,6 @@
 """v1.8 学习目标与诊断 API。"""
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -44,6 +44,10 @@ class DiagnosticAnswerSave(BaseModel):
     raw_answer: dict
     elapsed_seconds: int | None = Field(default=None, ge=0)
     confidence: int | None = Field(default=None, ge=1, le=5)
+
+
+class DiagnosticScoreConfirm(BaseModel):
+    final_score: int = Field(ge=0)
 
 
 class LearningPlanCreate(BaseModel):
@@ -110,6 +114,25 @@ def save_diagnostic_answer(session_id: int, question_id: int, payload: Diagnosti
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"id": answer.id, "question_id": answer.question_id, "final_score": answer.final_score, "confirmed": answer.confirmed_at is not None}
+
+
+@router.post("/diagnostics/{session_id}/answers/{question_id}/confirm")
+def confirm_subjective_score(session_id: int, question_id: int, payload: DiagnosticScoreConfirm, db: Session = Depends(get_db), user_id: int = Depends(require_current_user_id)):
+    session = db.get(DiagnosticSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="诊断不存在")
+    get_owned_student(db, session.student_id, user_id)
+    answer = db.query(DiagnosticAnswer).filter(DiagnosticAnswer.session_id == session_id, DiagnosticAnswer.question_id == question_id).one_or_none()
+    question = db.get(DiagnosticQuestion, question_id)
+    if answer is None or question is None or question.question_type == "objective":
+        raise HTTPException(status_code=400, detail="只能确认该诊断中的主观题")
+    if payload.final_score > question.max_score:
+        raise HTTPException(status_code=400, detail="确认分数超过题目满分")
+    answer.final_score = payload.final_score
+    answer.confirmed_at = datetime.now()
+    answer.suggestion_basis = {**(answer.suggestion_basis or {}), "confirmed_by": "student"}
+    db.commit()
+    return {"id": answer.id, "final_score": answer.final_score, "confirmed": True}
 
 
 @router.post("/diagnostics/{session_id}/submit")

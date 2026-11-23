@@ -1,0 +1,13 @@
+[
+  {
+    "knowledge_point_id": 1736,
+    "question_type": "objective",
+    "difficulty": "基础",
+    "stem": "1 小时等于多少分钟？",
+    "options": ["30", "60", "100"],
+    "answer_key": {"value": "60"},
+    "max_score": 1,
+    "reviewed_by": "工程验证样例（非学科人工审校）",
+    "review_note": "仅验证 v1.8 题库、诊断与计划工程链路；不作为正式教学测评资产。"
+  }
+]

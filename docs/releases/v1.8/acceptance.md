@@ -61,3 +61,7 @@ python scripts/import_v18_diagnostic_questions.py scripts/v18_diagnostic_questio
 ```
 
 模板中的占位符不能直接导入；它是人工审校题目的结构说明，避免把生成内容冒充正式测评资产。
+
+仓库另附 `backend/scripts/v18_v142_engineering_samples.json`：它是明确标注为“非学科人工审校”的工程验证样例，只用于验证已激活的 v142 内容包能被受控题库读取。正式发布前必须由学科审核人以同一导入格式替换或复审。
+
+2026-11-23 已对本机 active `v142` 运行该工程样例导入，结果为 `created: 1, skipped: 0`。

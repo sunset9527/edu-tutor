@@ -276,6 +276,7 @@ export const eduApi = {
   updateLearningGoal: (goalId: number, data: { target_date?: string; weekly_minutes?: number; status?: 'active' | 'paused' | 'ended'; change_reason: string }) => client.patch<LearningGoalResponse>(`/learning/goals/${goalId}`, data).then((r) => r.data),
   startDiagnostic: (data: { student_id: number; goal_id: number }) => client.post<DiagnosticSessionResponse>('/learning/diagnostics', data).then((r) => r.data),
   saveDiagnosticAnswer: (sessionId: number, questionId: number, data: { raw_answer: Record<string, unknown>; elapsed_seconds?: number; confidence?: number }) => client.put<{ final_score: number | null; confirmed: boolean }>(`/learning/diagnostics/${sessionId}/answers/${questionId}`, data).then((r) => r.data),
+  confirmDiagnosticScore: (sessionId: number, questionId: number, final_score: number) => client.post<{ final_score: number; confirmed: boolean }>(`/learning/diagnostics/${sessionId}/answers/${questionId}/confirm`, { final_score }).then((r) => r.data),
   submitDiagnostic: (sessionId: number) => client.post<{ status: string; results: Array<{ knowledge_point_id: number; mastery?: string; evidence_status: string; score_rate?: number }> }>(`/learning/diagnostics/${sessionId}/submit`).then((r) => r.data),
   createLearningPlan: (data: { student_id: number; goal_id: number; adjustment_reason?: string }) => client.post<LearningPlanResponse>('/learning/plans', data).then((r) => r.data),
 
