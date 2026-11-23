@@ -165,6 +165,8 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         report_results = {row["knowledge_point_id"]: row for row in report.json()["results"]}
         assert report_results[target_id]["evidence_status"] == "confirmed"
         assert report_results[target_id]["source_page_range"] == [1, 1]
+        assert report_results[target_id]["elapsed_seconds"] == 8
+        assert report_results[target_id]["confidence"] == 4.0
         assert report_results[uncovered_target_id]["score_rate"] is None
         assert report_results[uncovered_target_id]["valid_answer_count"] == 0
         assert report_results[uncovered_target_id]["mastery"] is None
@@ -191,6 +193,7 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
             goal_id=goal.id,
             target_date=date.today() + timedelta(days=42),
             weekly_minutes=180,
+            target_level="基本会",
             target_knowledge_point_ids=[target_id],
             status="paused",
             change_reason="paused",
@@ -199,6 +202,7 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         assert updated.current_version_no == 2
         assert updated.current_version.status == "paused"
         assert updated.current_version.weekly_minutes == 180
+        assert updated.current_version.target_level == "基本会"
         assert [item.knowledge_point_id for item in updated.current_version.targets] == [target_id]
         assert [(row.version_no, row.weekly_minutes, row.status) for row in updated.versions] == [
             (1, 120, "active"),

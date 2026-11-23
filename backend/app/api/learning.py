@@ -33,6 +33,7 @@ class LearningGoalCreate(BaseModel):
 class LearningGoalVersionUpdate(BaseModel):
     target_date: date | None = None
     weekly_minutes: int | None = Field(default=None, gt=0, le=10_080)
+    target_level: str | None = Field(default=None, min_length=1, max_length=20)
     target_knowledge_point_ids: list[int] | None = Field(default=None, min_length=1)
     status: str | None = Field(default=None, pattern="^(active|paused|ended)$")
     change_reason: str = Field(min_length=1, max_length=50)
@@ -103,6 +104,7 @@ def _plan_payload(db: Session, plan: LearningPlanVersion, *, stale: bool = False
         "adjustment_reason": plan.adjustment_reason,
         "scheduled_minutes": plan.scheduled_minutes,
         "missing_minutes": plan.missing_minutes,
+        "evidence_gap": (plan.evidence_snapshot or {}).get("evidence_gap", {"has_gap": False, "missing_prerequisite_ids": []}),
         "items": [{"knowledge_point_id": item.knowledge_point_id, "week_no": item.week_no, "estimated_minutes": item.estimated_minutes, "reasons": item.recommendation_reasons, "completion_condition": item.completion_condition, "evidence": item.evidence_json, "scheduled": item.scheduled} for item in items],
     }
 
@@ -239,11 +241,22 @@ def diagnostic_report(session_id: int, db: Session = Depends(get_db), user_id: i
         raise HTTPException(status_code=404, detail="诊断不存在")
     get_owned_student(db, session.student_id, user_id)
     rows = db.query(DiagnosticKnowledgeResult).filter(DiagnosticKnowledgeResult.session_id == session_id).order_by(DiagnosticKnowledgeResult.knowledge_point_id).all()
+    answers = db.query(DiagnosticAnswer).filter(DiagnosticAnswer.session_id == session_id).all()
+    answer_questions = {question.id: question for question in db.query(DiagnosticQuestion).filter(DiagnosticQuestion.id.in_([answer.question_id for answer in answers])).all()}
+    metrics: dict[int, dict] = {}
+    for answer in answers:
+        question = answer_questions.get(answer.question_id)
+        if question is None:
+            continue
+        item = metrics.setdefault(question.knowledge_point_id, {"elapsed_seconds": 0, "confidences": []})
+        item["elapsed_seconds"] += answer.elapsed_seconds or 0
+        if answer.confidence is not None:
+            item["confidences"].append(answer.confidence)
     point_ids = [row.knowledge_point_id for row in rows]
     points = {point.id: point for point in db.query(KnowledgePoint).filter(KnowledgePoint.id.in_(point_ids)).all()}
     chunk_ids = [point.source_chunk_id for point in points.values() if point.source_chunk_id is not None]
     chunks = {chunk.id: chunk for chunk in db.query(KnowledgeSourceChunk).filter(KnowledgeSourceChunk.id.in_(chunk_ids)).all()}
-    return {"session_id": session.id, "status": session.status, "results": [{"knowledge_point_id": row.knowledge_point_id, "knowledge_point_title": points.get(row.knowledge_point_id).title if points.get(row.knowledge_point_id) else None, "source_page_range": ([chunks[points[row.knowledge_point_id].source_chunk_id].start_page, chunks[points[row.knowledge_point_id].source_chunk_id].end_page] if points.get(row.knowledge_point_id) and points[row.knowledge_point_id].source_chunk_id in chunks else None), "mastery": row.mastery, "evidence_status": row.evidence_status, "score_rate": row.score_rate, "valid_answer_count": row.valid_answer_count, "evidence": row.evidence_json} for row in rows]}
+    return {"session_id": session.id, "status": session.status, "results": [{"knowledge_point_id": row.knowledge_point_id, "knowledge_point_title": points.get(row.knowledge_point_id).title if points.get(row.knowledge_point_id) else None, "source_page_range": ([chunks[points[row.knowledge_point_id].source_chunk_id].start_page, chunks[points[row.knowledge_point_id].source_chunk_id].end_page] if points.get(row.knowledge_point_id) and points[row.knowledge_point_id].source_chunk_id in chunks else None), "mastery": row.mastery, "evidence_status": row.evidence_status, "score_rate": row.score_rate, "valid_answer_count": row.valid_answer_count, "elapsed_seconds": metrics.get(row.knowledge_point_id, {}).get("elapsed_seconds") if row.valid_answer_count else None, "confidence": (sum(metrics.get(row.knowledge_point_id, {}).get("confidences", [])) / len(metrics.get(row.knowledge_point_id, {}).get("confidences", []))) if metrics.get(row.knowledge_point_id, {}).get("confidences") else None, "evidence": row.evidence_json} for row in rows]}
 
 
 @router.post("/goals", status_code=201)

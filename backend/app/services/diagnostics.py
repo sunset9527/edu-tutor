@@ -10,8 +10,8 @@ from app.models.knowledge import KnowledgePoint, KnowledgePointLink
 from app.models.learning import LearningGoal, LearningGoalTarget
 
 
-def diagnostic_scope_knowledge_point_ids(db: Session, *, goal_version_id: int, knowledge_version_id: int) -> list[int]:
-    """目标及同一知识版本中全部先修点，按先修优先的稳定顺序返回。"""
+def diagnostic_scope_knowledge_point_ids(db: Session, *, goal_version_id: int, knowledge_version_id: int, max_prerequisite_depth: int = 2) -> list[int]:
+    """目标及限定深度内、同一知识版本的先修点，按先修优先的稳定顺序返回。"""
     target_ids = [
         row.knowledge_point_id
         for row in db.query(LearningGoalTarget)
@@ -35,12 +35,13 @@ def diagnostic_scope_knowledge_point_ids(db: Session, *, goal_version_id: int, k
     ordered: list[int] = []
     visited: set[int] = set()
 
-    def visit(knowledge_point_id: int) -> None:
+    def visit(knowledge_point_id: int, depth: int = 0) -> None:
         if knowledge_point_id in visited:
             return
         visited.add(knowledge_point_id)
-        for prerequisite_id in sorted(prereqs.get(knowledge_point_id, [])):
-            visit(prerequisite_id)
+        if depth < max_prerequisite_depth:
+            for prerequisite_id in sorted(prereqs.get(knowledge_point_id, [])):
+                visit(prerequisite_id, depth + 1)
         ordered.append(knowledge_point_id)
 
     for target_id in target_ids:

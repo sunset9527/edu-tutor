@@ -71,7 +71,8 @@ def generate_learning_plan(db: Session, *, student_id: int, goal_id: int, adjust
     points = {row.id: row for row in db.query(KnowledgePoint).filter(KnowledgePoint.id.in_(ordered), KnowledgePoint.version_id == goal_version.knowledge_version_id).all()}
     weeks = max(1, ceil((goal_version.target_date - date.today()).days / 7))
     capacity = weeks * goal_version.weekly_minutes
-    plan = LearningPlanVersion(student_id=student_id, goal_id=goal.id, goal_version_id=goal_version.id, diagnostic_session_id=session.id, knowledge_version_id=goal_version.knowledge_version_id, adjustment_reason=adjustment_reason, total_available_minutes=capacity, evidence_snapshot={"diagnostic_session_id": session.id, "result_ids": [row.id for row in result_rows]})
+    graph_gap_ids = sorted(set(ordered) - set(points))
+    plan = LearningPlanVersion(student_id=student_id, goal_id=goal.id, goal_version_id=goal_version.id, diagnostic_session_id=session.id, knowledge_version_id=goal_version.knowledge_version_id, adjustment_reason=adjustment_reason, total_available_minutes=capacity, evidence_snapshot={"diagnostic_session_id": session.id, "result_ids": [row.id for row in result_rows], "evidence_gap": {"has_gap": bool(graph_gap_ids), "missing_prerequisite_ids": graph_gap_ids}})
     db.query(LearningPlanVersion).filter(
         LearningPlanVersion.goal_id == goal.id,
         LearningPlanVersion.status.in_(["current", "needs_adjustment"]),

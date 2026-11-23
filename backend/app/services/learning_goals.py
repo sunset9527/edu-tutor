@@ -91,6 +91,7 @@ def append_learning_goal_version(
     goal_id: int,
     target_date: date | None = None,
     weekly_minutes: int | None = None,
+    target_level: str | None = None,
     target_knowledge_point_ids: list[int] | None = None,
     status: str | None = None,
     change_reason: str,
@@ -102,6 +103,7 @@ def append_learning_goal_version(
     previous = goal.current_version
     next_target_date = target_date or previous.target_date
     next_weekly_minutes = weekly_minutes if weekly_minutes is not None else previous.weekly_minutes
+    next_target_level = target_level or previous.target_level
     if next_target_date <= date.today():
         raise ValueError("目标日期必须晚于今天")
     if next_weekly_minutes <= 0:
@@ -132,7 +134,7 @@ def append_learning_goal_version(
         target_date=next_target_date,
         weekly_minutes=next_weekly_minutes,
         subject=previous.subject,
-        target_level=previous.target_level,
+        target_level=next_target_level,
         status=status or previous.status,
         change_reason=change_reason,
     )
