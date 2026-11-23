@@ -13,7 +13,7 @@ from app.models.knowledge_governance import KnowledgeSourceChunk, KnowledgeVersi
 from app.models.learning import LearningGoal, LearningGoalTarget, LearningGoalVersion
 from app.models.student import Student
 from app.models.user import User
-from app.services.learning_goals import append_learning_goal_version, create_learning_goal
+from app.services.learning_goals import append_learning_goal_version
 
 
 client = TestClient(app)
@@ -31,6 +31,7 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         source_kind="fixture",
     )
     student = Student(name=f"v18-goal-{token}", grade="二年级", subject="数学")
+    student_id = user_id = other_user_id = textbook_id = version_id = chunk_id = target_id = None
     try:
         db.add_all([user, other_user, textbook, student])
         db.flush()
@@ -68,20 +69,35 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         )
         db.add(target)
         db.commit()
+        student_id = student.id
+        user_id = user.id
+        other_user_id = other_user.id
+        textbook_id = textbook.id
+        version_id = version.id
+        chunk_id = chunk.id
+        target_id = target.id
+        db.close()
 
-        goal = create_learning_goal(
-            db,
-            student_id=student.id,
-            target_date=date.today() + timedelta(days=28),
-            weekly_minutes=120,
-            subject="数学",
-            target_level="熟练",
-            target_knowledge_point_ids=[target.id],
+        created = client.post(
+            "/api/learning/goals",
+            headers={"Authorization": f"Bearer {create_token(user_id)}"},
+            json={
+                "student_id": student_id,
+                "target_date": str(date.today() + timedelta(days=28)),
+                "weekly_minutes": 120,
+                "subject": "数学",
+                "target_level": "熟练",
+                "target_knowledge_point_ids": [target_id],
+            },
         )
+        assert created.status_code == 201
+        db = SessionLocal()
+        goal = db.get(LearningGoal, created.json()["id"])
+        assert goal is not None
 
         assert goal.current_version_no == 1
-        assert goal.current_version.knowledge_version_id == version.id
-        assert [item.knowledge_point_id for item in goal.current_version.targets] == [target.id]
+        assert goal.current_version.knowledge_version_id == version_id
+        assert [item.knowledge_point_id for item in goal.current_version.targets] == [target_id]
         assert goal.current_version.status == "active"
 
         updated = append_learning_goal_version(
@@ -102,51 +118,53 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         ]
 
         own = client.get(
-            f"/api/learning/goals/{student.id}",
-            headers={"Authorization": f"Bearer {create_token(user.id)}"},
+            f"/api/learning/goals/{student_id}",
+            headers={"Authorization": f"Bearer {create_token(user_id)}"},
         )
         assert own.status_code == 200
         assert own.json()["current_version"]["version_no"] == 2
         foreign = client.get(
-            f"/api/learning/goals/{student.id}",
-            headers={"Authorization": f"Bearer {create_token(other_user.id)}"},
+            f"/api/learning/goals/{student_id}",
+            headers={"Authorization": f"Bearer {create_token(other_user_id)}"},
         )
         assert foreign.status_code == 404
     finally:
         db.rollback()
-        db.query(LearningGoal).filter(LearningGoal.student_id == student.id).update(
+        db.query(LearningGoal).filter(LearningGoal.student_id == student_id).update(
             {"current_version_id": None}, synchronize_session=False
         )
         db.flush()
         db.query(LearningGoalTarget).filter(
             LearningGoalTarget.goal_version_id.in_(
                 db.query(LearningGoalVersion.id).filter(LearningGoalVersion.goal_id.in_(
-                    db.query(LearningGoal.id).filter(LearningGoal.student_id == student.id)
+                    db.query(LearningGoal.id).filter(LearningGoal.student_id == student_id)
                 ))
             )
         ).delete(synchronize_session=False)
         db.query(LearningGoalVersion).filter(
             LearningGoalVersion.goal_id.in_(
-                db.query(LearningGoal.id).filter(LearningGoal.student_id == student.id)
+                db.query(LearningGoal.id).filter(LearningGoal.student_id == student_id)
             )
         ).delete(synchronize_session=False)
-        db.query(LearningGoal).filter(LearningGoal.student_id == student.id).delete(
+        db.query(LearningGoal).filter(LearningGoal.student_id == student_id).delete(
             synchronize_session=False
         )
-        db.query(KnowledgePoint).filter(KnowledgePoint.id == target.id).delete(
+        db.query(KnowledgePoint).filter(KnowledgePoint.id == target_id).delete(
             synchronize_session=False
         )
-        db.query(KnowledgeSourceChunk).filter(KnowledgeSourceChunk.id == chunk.id).delete(
+        db.query(KnowledgeSourceChunk).filter(KnowledgeSourceChunk.id == chunk_id).delete(
             synchronize_session=False
         )
-        textbook.active_version_id = None
+        db.query(Textbook).filter(Textbook.id == textbook_id).update(
+            {"active_version_id": None}, synchronize_session=False
+        )
         db.flush()
-        db.query(KnowledgeVersion).filter(KnowledgeVersion.id == version.id).delete(
+        db.query(KnowledgeVersion).filter(KnowledgeVersion.id == version_id).delete(
             synchronize_session=False
         )
-        db.query(Textbook).filter(Textbook.id == textbook.id).delete(synchronize_session=False)
-        db.query(Student).filter(Student.id == student.id).delete(synchronize_session=False)
-        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
-        db.query(User).filter(User.id == other_user.id).delete(synchronize_session=False)
+        db.query(Textbook).filter(Textbook.id == textbook_id).delete(synchronize_session=False)
+        db.query(Student).filter(Student.id == student_id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user_id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == other_user_id).delete(synchronize_session=False)
         db.commit()
         db.close()

@@ -20,3 +20,5 @@
 - RED：学习目标读取接口不存在，本人请求得到 404。
 - GREEN：新增 `GET /api/learning/goals/{student_id}`，复用 `get_owned_student`；本人读取为 200，其他账号为 404，目标集成测试通过。
 - 下一步：为目标创建与版本更新补齐写入 API，然后开始诊断领域模型。
+- 已修正 TestClient 与夹具 session 的事务隔离：创建夹具后关闭原 session，HTTP 请求后新建 session 校验和清理。
+- `POST /api/learning/goals` 已通过集成测试（1 passed）；下一步为目标版本更新 API 写失败测试。
