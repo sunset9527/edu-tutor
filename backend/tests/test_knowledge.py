@@ -7,7 +7,7 @@ from app.services.knowledge.graph_service import KnowledgeGraphService
 from app.services.knowledge.pdf_parser import extract_text_by_pages
 from app.services.memory.storage import MemoryStorage
 
-PDF_QIYI = r"E:\个人发展\002职业\项目4：个性化教育\知识库\初中\人教版数学六三制：电子课本\2024 人教版数学 七年级上册电子课本（高清正式版）.pdf"
+PDF_QIYI = r"E:\个人发展\002职业\项目4：个性化教育\知识库\初中\初中数学\2024 人教版数学 七年级上册电子课本（高清正式版）.pdf"
 
 
 def test_pdf_extract_text():

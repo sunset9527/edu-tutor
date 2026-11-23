@@ -43,7 +43,10 @@ def generate_learning_plan(db: Session, *, student_id: int, goal_id: int, adjust
     weeks = max(1, ceil((goal_version.target_date - date.today()).days / 7))
     capacity = weeks * goal_version.weekly_minutes
     plan = LearningPlanVersion(student_id=student_id, goal_id=goal.id, goal_version_id=goal_version.id, diagnostic_session_id=session.id, knowledge_version_id=goal_version.knowledge_version_id, adjustment_reason=adjustment_reason, total_available_minutes=capacity, evidence_snapshot={"diagnostic_session_id": session.id, "result_ids": [row.id for row in result_rows]})
-    db.query(LearningPlanVersion).filter(LearningPlanVersion.goal_id == goal.id, LearningPlanVersion.status == "current").update({"status": "superseded"}, synchronize_session=False)
+    db.query(LearningPlanVersion).filter(
+        LearningPlanVersion.goal_id == goal.id,
+        LearningPlanVersion.status.in_(["current", "needs_adjustment"]),
+    ).update({"status": "superseded"}, synchronize_session=False)
     db.add(plan); db.flush()
     scheduled = 0
     for sequence, kp_id in enumerate(ordered, 1):

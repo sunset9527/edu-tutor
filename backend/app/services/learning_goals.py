@@ -91,6 +91,7 @@ def append_learning_goal_version(
     goal_id: int,
     target_date: date | None = None,
     weekly_minutes: int | None = None,
+    target_knowledge_point_ids: list[int] | None = None,
     status: str | None = None,
     change_reason: str,
 ) -> LearningGoal:
@@ -105,6 +106,24 @@ def append_learning_goal_version(
         raise ValueError("目标日期必须晚于今天")
     if next_weekly_minutes <= 0:
         raise ValueError("每周可投入时间必须大于 0")
+
+    if target_knowledge_point_ids is None:
+        next_target_ids = [target.knowledge_point_id for target in previous.targets]
+    else:
+        next_target_ids = list(dict.fromkeys(target_knowledge_point_ids))
+        if not next_target_ids:
+            raise ValueError("至少选择一个目标知识点")
+        points = db.query(KnowledgePoint).filter(KnowledgePoint.id.in_(next_target_ids)).all()
+        if len(points) != len(next_target_ids):
+            raise ValueError("目标知识点不存在")
+        if any(
+            point.version_id != previous.knowledge_version_id
+            or point.subject != previous.subject
+            or point.source_chunk_id is None
+            or point.provenance_gap
+            for point in points
+        ):
+            raise ValueError("新目标知识点必须来自当前目标固定知识版本且具有来源证据")
 
     next_version = LearningGoalVersion(
         goal_id=goal.id,
@@ -123,9 +142,9 @@ def append_learning_goal_version(
         [
             LearningGoalTarget(
                 goal_version_id=next_version.id,
-                knowledge_point_id=target.knowledge_point_id,
+                knowledge_point_id=knowledge_point_id,
             )
-            for target in previous.targets
+            for knowledge_point_id in next_target_ids
         ]
     )
     goal.current_version_id = next_version.id

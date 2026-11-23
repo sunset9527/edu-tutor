@@ -6,7 +6,46 @@ import json
 from sqlalchemy.orm import Session
 
 from app.models.diagnostics import DiagnosticAnswer, DiagnosticKnowledgeResult, DiagnosticQuestion, DiagnosticSession
-from app.models.learning import LearningGoal
+from app.models.knowledge import KnowledgePoint, KnowledgePointLink
+from app.models.learning import LearningGoal, LearningGoalTarget
+
+
+def diagnostic_scope_knowledge_point_ids(db: Session, *, goal_version_id: int, knowledge_version_id: int) -> list[int]:
+    """目标及同一知识版本中全部先修点，按先修优先的稳定顺序返回。"""
+    target_ids = [
+        row.knowledge_point_id
+        for row in db.query(LearningGoalTarget)
+        .filter(LearningGoalTarget.goal_version_id == goal_version_id)
+        .order_by(LearningGoalTarget.id)
+        .all()
+    ]
+    version_point_ids = {
+        row.id for row in db.query(KnowledgePoint.id)
+        .filter(KnowledgePoint.version_id == knowledge_version_id)
+        .all()
+    }
+    links = db.query(KnowledgePointLink).filter(
+        KnowledgePointLink.link_type == "prerequisite",
+        KnowledgePointLink.source_kp_id.in_(version_point_ids),
+        KnowledgePointLink.target_kp_id.in_(version_point_ids),
+    ).all()
+    prereqs: dict[int, list[int]] = {}
+    for link in links:
+        prereqs.setdefault(link.target_kp_id, []).append(link.source_kp_id)
+    ordered: list[int] = []
+    visited: set[int] = set()
+
+    def visit(knowledge_point_id: int) -> None:
+        if knowledge_point_id in visited:
+            return
+        visited.add(knowledge_point_id)
+        for prerequisite_id in sorted(prereqs.get(knowledge_point_id, [])):
+            visit(prerequisite_id)
+        ordered.append(knowledge_point_id)
+
+    for target_id in target_ids:
+        visit(target_id)
+    return ordered
 
 
 def _suggest_subjective_score(question: DiagnosticQuestion, raw_answer: dict) -> tuple[int | None, dict]:
@@ -44,14 +83,18 @@ def start_or_resume_diagnostic(db: Session, *, student_id: int, goal_id: int) ->
     ).order_by(DiagnosticSession.id.desc()).first()
     if existing:
         return existing
-    target_ids = [item.knowledge_point_id for item in version.targets]
+    target_ids = diagnostic_scope_knowledge_point_ids(
+        db,
+        goal_version_id=version.id,
+        knowledge_version_id=version.knowledge_version_id,
+    )
     questions = db.query(DiagnosticQuestion).filter(
         DiagnosticQuestion.knowledge_version_id == version.knowledge_version_id,
         DiagnosticQuestion.knowledge_point_id.in_(target_ids),
         DiagnosticQuestion.status == "published",
     ).order_by(DiagnosticQuestion.knowledge_point_id, DiagnosticQuestion.id).all()
     if not questions:
-        raise ValueError("目标范围没有已发布诊断题")
+        raise ValueError(f"目标范围没有已发布诊断题，缺题知识点：{target_ids}")
     session = DiagnosticSession(student_id=student_id, goal_id=goal.id, goal_version_id=version.id, knowledge_version_id=version.knowledge_version_id)
     db.add(session)
     db.flush()
@@ -62,6 +105,8 @@ def start_or_resume_diagnostic(db: Session, *, student_id: int, goal_id: int) ->
 
 
 def save_answer(db: Session, *, session: DiagnosticSession, question_id: int, raw_answer: dict, elapsed_seconds: int | None, confidence: int | None) -> DiagnosticAnswer:
+    if session.status != "in_progress":
+        raise ValueError("诊断已提交，不能修改答案")
     answer = db.query(DiagnosticAnswer).filter(DiagnosticAnswer.session_id == session.id, DiagnosticAnswer.question_id == question_id).one_or_none()
     if answer is None:
         raise ValueError("题目不属于该诊断")
@@ -90,6 +135,10 @@ def save_answer(db: Session, *, session: DiagnosticSession, question_id: int, ra
 
 def submit_diagnostic(db: Session, *, session: DiagnosticSession) -> list[DiagnosticKnowledgeResult]:
     """提交已确认的诊断，按知识点持久化可追溯结论。"""
+    if session.status == "submitted":
+        return db.query(DiagnosticKnowledgeResult).filter(
+            DiagnosticKnowledgeResult.session_id == session.id
+        ).order_by(DiagnosticKnowledgeResult.knowledge_point_id).all()
     answers = db.query(DiagnosticAnswer).filter(DiagnosticAnswer.session_id == session.id).all()
     if not answers or any(answer.raw_answer is None or answer.final_score is None for answer in answers):
         raise ValueError("仍有题目未作答或主观题未确认")
@@ -106,6 +155,27 @@ def submit_diagnostic(db: Session, *, session: DiagnosticSession) -> list[Diagno
         mastery = "不懂" if rate is not None and rate < .5 else "基本会" if rate is not None and rate < .8 else "熟练"
         result = DiagnosticKnowledgeResult(session_id=session.id, knowledge_point_id=knowledge_point_id, score_rate=rate, valid_answer_count=len(rows), mastery=mastery, evidence_status="confirmed", evidence_json={"answer_ids": [row.id for row in rows]})
         db.add(result); results.append(result)
+    # A configured target that has no published question must remain visible in
+    # the report.  Absence of evidence is deliberately not interpreted as a
+    # low score or as "不懂".
+    target_ids = {
+        row.knowledge_point_id
+        for row in db.query(LearningGoalTarget)
+        .filter(LearningGoalTarget.goal_version_id == session.goal_version_id)
+        .all()
+    }
+    for knowledge_point_id in target_ids - set(grouped):
+        result = DiagnosticKnowledgeResult(
+            session_id=session.id,
+            knowledge_point_id=knowledge_point_id,
+            score_rate=None,
+            valid_answer_count=0,
+            mastery=None,
+            evidence_status="no_evidence",
+            evidence_json={"reason": "no_published_diagnostic_question"},
+        )
+        db.add(result)
+        results.append(result)
     session.status = "submitted"; session.submitted_at = datetime.now()
     db.commit()
     return results
