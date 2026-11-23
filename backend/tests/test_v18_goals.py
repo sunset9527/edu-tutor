@@ -137,6 +137,12 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         )
         assert submitted.status_code == 200
         assert submitted.json()["results"][0]["mastery"] == "熟练"
+        report = client.get(
+            f"/api/learning/diagnostics/{session_id}/report",
+            headers={"Authorization": f"Bearer {create_token(user_id)}"},
+        )
+        assert report.status_code == 200
+        assert report.json()["results"][0]["evidence_status"] == "confirmed"
         planned = client.post(
             "/api/learning/plans",
             headers={"Authorization": f"Bearer {create_token(user_id)}"},

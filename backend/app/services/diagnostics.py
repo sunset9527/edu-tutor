@@ -1,11 +1,33 @@
 """v1.8 受控诊断会话与确定性客观题评分。"""
 
 from datetime import datetime
+import json
 
 from sqlalchemy.orm import Session
 
 from app.models.diagnostics import DiagnosticAnswer, DiagnosticKnowledgeResult, DiagnosticQuestion, DiagnosticSession
 from app.models.learning import LearningGoal
+
+
+def _suggest_subjective_score(question: DiagnosticQuestion, raw_answer: dict) -> tuple[int | None, dict]:
+    """返回模型建议；不可用或失败时只返回状态，绝不构造分数。"""
+    from app.core.config import settings
+    if not settings.llm_configured:
+        return None, {"status": "awaiting_model_suggestion", "reason": "llm_not_configured"}
+    try:
+        from app.core.llm import create_llm
+        prompt = (
+            "你是诊断测评评分助手。仅返回 JSON：{\"score\":整数,\"reason\":字符串}。"
+            f"题目：{question.stem}\n满分：{question.max_score}\n评分规则：{question.rubric_json or {}}\n学生答案：{raw_answer}"
+        )
+        content = str(create_llm(temperature=0.0).invoke(prompt).content).strip()
+        data = json.loads(content.removeprefix("```json").removesuffix("```").strip())
+        score = int(data["score"])
+        if not 0 <= score <= question.max_score:
+            raise ValueError("suggested score out of range")
+        return score, {"status": "suggested", "model": settings.deepseek_model, "reason": str(data.get("reason", ""))}
+    except Exception as exc:
+        return None, {"status": "awaiting_model_suggestion", "reason": "model_failed", "error_type": type(exc).__name__}
 
 
 def start_or_resume_diagnostic(db: Session, *, student_id: int, goal_id: int) -> DiagnosticSession:
@@ -59,7 +81,7 @@ def save_answer(db: Session, *, session: DiagnosticSession, question_id: int, ra
     else:
         answer.deterministic_score = None
         answer.final_score = None
-        answer.suggestion_basis = {"status": "awaiting_model_suggestion"}
+        answer.suggested_score, answer.suggestion_basis = _suggest_subjective_score(question, raw_answer)
         answer.confirmed_at = None
     db.commit()
     db.refresh(answer)

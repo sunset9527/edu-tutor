@@ -10,7 +10,7 @@ from app.api.access import get_owned_student
 from app.api.auth import require_current_user_id
 from app.core.database import get_db
 from app.models.learning import LearningGoal
-from app.models.diagnostics import DiagnosticAnswer, DiagnosticQuestion, DiagnosticSession
+from app.models.diagnostics import DiagnosticAnswer, DiagnosticKnowledgeResult, DiagnosticQuestion, DiagnosticSession
 from app.services.diagnostics import save_answer, start_or_resume_diagnostic, submit_diagnostic
 from app.services.learning_plans import generate_learning_plan
 from app.services.learning_goals import append_learning_goal_version, create_learning_goal
@@ -79,7 +79,7 @@ def _goal_payload(goal: LearningGoal) -> dict:
 
 def _session_payload(db: Session, session: DiagnosticSession) -> dict:
     answers = db.query(DiagnosticAnswer).filter(DiagnosticAnswer.session_id == session.id).order_by(DiagnosticAnswer.id).all()
-    return {"id": session.id, "status": session.status, "goal_version_id": session.goal_version_id, "knowledge_version_id": session.knowledge_version_id, "questions": [{"question_id": answer.question_id, "stem": db.get(DiagnosticQuestion, answer.question_id).stem, "question_type": db.get(DiagnosticQuestion, answer.question_id).question_type, "options": db.get(DiagnosticQuestion, answer.question_id).options_json, "raw_answer": answer.raw_answer, "final_score": answer.final_score, "confirmed": answer.confirmed_at is not None} for answer in answers]}
+    return {"id": session.id, "status": session.status, "goal_version_id": session.goal_version_id, "knowledge_version_id": session.knowledge_version_id, "questions": [{"question_id": answer.question_id, "stem": db.get(DiagnosticQuestion, answer.question_id).stem, "question_type": db.get(DiagnosticQuestion, answer.question_id).question_type, "options": db.get(DiagnosticQuestion, answer.question_id).options_json, "raw_answer": answer.raw_answer, "suggested_score": answer.suggested_score, "suggestion_basis": answer.suggestion_basis, "final_score": answer.final_score, "confirmed": answer.confirmed_at is not None} for answer in answers]}
 
 
 @router.post("/plans", status_code=201)
@@ -146,6 +146,16 @@ def submit_diagnostic_session(session_id: int, db: Session = Depends(get_db), us
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"session_id": session.id, "status": "submitted", "results": [{"knowledge_point_id": row.knowledge_point_id, "mastery": row.mastery, "evidence_status": row.evidence_status, "score_rate": row.score_rate} for row in results]}
+
+
+@router.get("/diagnostics/{session_id}/report")
+def diagnostic_report(session_id: int, db: Session = Depends(get_db), user_id: int = Depends(require_current_user_id)):
+    session = db.get(DiagnosticSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="诊断不存在")
+    get_owned_student(db, session.student_id, user_id)
+    rows = db.query(DiagnosticKnowledgeResult).filter(DiagnosticKnowledgeResult.session_id == session_id).order_by(DiagnosticKnowledgeResult.knowledge_point_id).all()
+    return {"session_id": session.id, "status": session.status, "results": [{"knowledge_point_id": row.knowledge_point_id, "mastery": row.mastery, "evidence_status": row.evidence_status, "score_rate": row.score_rate, "valid_answer_count": row.valid_answer_count, "evidence": row.evidence_json} for row in rows]}
 
 
 @router.post("/goals", status_code=201)
