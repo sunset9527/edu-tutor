@@ -40,5 +40,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("idx_diagnostic_question_scope", table_name="diagnostic_questions")
     op.drop_table("diagnostic_questions")
