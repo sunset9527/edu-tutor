@@ -1,0 +1,13 @@
+[
+  {
+    "knowledge_point_id": "REPLACE_WITH_ACTIVE_V142_POINT_ID",
+    "question_type": "objective",
+    "difficulty": "基础",
+    "stem": "REPLACE_WITH_HUMAN_REVIEWED_QUESTION",
+    "options": ["A", "B"],
+    "answer_key": {"value": "A"},
+    "max_score": 1,
+    "reviewed_by": "REPLACE_WITH_REVIEWER",
+    "review_note": "人工审校日期、依据与范围"
+  }
+]

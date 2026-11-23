@@ -50,3 +50,14 @@ npm run build
 
 - 主观题保存答案并保持未确认状态；没有实际可用评分模型建议时，不会伪造分数或把它写成掌握证据。
 - 当前 real `v142` 内容包尚未导入教师审校的正式诊断题；路由只会使用已发布且绑定来源块的题目。工程集成测试使用独立受控夹具。
+
+## v142 人工审校题目导入
+
+仓库提供 `backend/scripts/v18_diagnostic_question_template.json` 模板和受控导入器。只有包含 `reviewed_by` 与 `review_note` 的人工审校题目才能发布：
+
+```powershell
+cd backend
+python scripts/import_v18_diagnostic_questions.py scripts/v18_diagnostic_question_template.json --version-id 142
+```
+
+模板中的占位符不能直接导入；它是人工审校题目的结构说明，避免把生成内容冒充正式测评资产。
