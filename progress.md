@@ -22,3 +22,4 @@
 - 下一步：为目标创建与版本更新补齐写入 API，然后开始诊断领域模型。
 - 已修正 TestClient 与夹具 session 的事务隔离：创建夹具后关闭原 session，HTTP 请求后新建 session 校验和清理。
 - `POST /api/learning/goals` 已通过集成测试（1 passed）；下一步为目标版本更新 API 写失败测试。
+- `PATCH /api/learning/goals/{goal_id}` 已通过 RED/GREEN：暂停后的目标可追加 active/resumed 版本，历史版本保持不变。

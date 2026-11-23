@@ -123,6 +123,14 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         )
         assert own.status_code == 200
         assert own.json()["current_version"]["version_no"] == 2
+        resumed = client.patch(
+            f"/api/learning/goals/{goal.id}",
+            headers={"Authorization": f"Bearer {create_token(user_id)}"},
+            json={"status": "active", "change_reason": "resumed"},
+        )
+        assert resumed.status_code == 200
+        assert resumed.json()["current_version"]["version_no"] == 3
+        assert resumed.json()["current_version"]["status"] == "active"
         foreign = client.get(
             f"/api/learning/goals/{student_id}",
             headers={"Authorization": f"Bearer {create_token(other_user_id)}"},

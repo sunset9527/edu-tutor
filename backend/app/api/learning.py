@@ -10,7 +10,7 @@ from app.api.access import get_owned_student
 from app.api.auth import require_current_user_id
 from app.core.database import get_db
 from app.models.learning import LearningGoal
-from app.services.learning_goals import create_learning_goal
+from app.services.learning_goals import append_learning_goal_version, create_learning_goal
 
 
 router = APIRouter(prefix="/api/learning", tags=["learning"])
@@ -23,6 +23,13 @@ class LearningGoalCreate(BaseModel):
     subject: str = Field(min_length=1, max_length=20)
     target_level: str = Field(min_length=1, max_length=20)
     target_knowledge_point_ids: list[int] = Field(min_length=1)
+
+
+class LearningGoalVersionUpdate(BaseModel):
+    target_date: date | None = None
+    weekly_minutes: int | None = Field(default=None, gt=0, le=10_080)
+    status: str | None = Field(default=None, pattern="^(active|paused|ended)$")
+    change_reason: str = Field(min_length=1, max_length=50)
 
 
 def _goal_payload(goal: LearningGoal) -> dict:
@@ -59,6 +66,25 @@ def create_goal(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _goal_payload(goal)
+
+
+@router.patch("/goals/{goal_id}")
+def update_goal(
+    goal_id: int,
+    payload: LearningGoalVersionUpdate,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(require_current_user_id),
+):
+    """追加目标版本；用于修改、暂停、恢复或结束。"""
+    goal = db.get(LearningGoal, goal_id)
+    if goal is None:
+        raise HTTPException(status_code=404, detail="学习目标不存在")
+    get_owned_student(db, goal.student_id, user_id)
+    try:
+        updated = append_learning_goal_version(db, goal_id=goal_id, **payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _goal_payload(updated)
 
 
 @router.get("/goals/{student_id}")
