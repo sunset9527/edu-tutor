@@ -27,7 +27,7 @@ cd backend
 python scripts/check_v18_migration_roundtrip.py
 ```
 
-随机临时库成功升级至 `e8b4a907c512`，降级至 `7efb3126a01c` 后诊断表消失，再升级后所有 v1.8 诊断/计划表恢复。
+随机临时库成功升级至 `f3b7a9c2d614`，降级至 `7efb3126a01c` 后诊断表消失，再升级后所有 v1.8 诊断/计划表及 `diagnostic_answers.final_score_reason` 恢复。
 
 ## 已执行命令
 
@@ -43,7 +43,7 @@ npm test
 npm run build
 ```
 
-已通过：完整后端回归（15 项）、v1.8 端到端集成测试、诊断模型测试、迁移往返、前端类型检查、Vitest 12 项和生产构建。
+已通过：完整后端回归（17 项）、v1.8 端到端集成测试、诊断模型与多来源证据冲突测试、迁移往返、前端类型检查、Vitest 13 项和生产构建。
 
 ## 完整后端回归
 
@@ -51,7 +51,7 @@ npm run build
 
 `知识库\初中\初中数学\2024 人教版数学 七年级上册电子课本（高清正式版）.pdf`。
 
-2026-11-23 已运行 `python -m pytest -q`，15 项均通过。该测试依旧是本机教材资产集成测试，而不是仓库内置二进制夹具。
+2026-11-23 已运行 `python -m pytest -q`，17 项均通过。该测试依旧是本机教材资产集成测试，而不是仓库内置二进制夹具。
 
 ## 已知范围
 
@@ -65,6 +65,7 @@ npm run build
 ```powershell
 cd backend
 python scripts/import_v18_diagnostic_questions.py scripts/v18_diagnostic_question_template.json --version-id 142
+python scripts/run_v18_engineering_acceptance.py
 ```
 
 模板中的占位符不能直接导入；它是人工审校题目的结构说明，避免把生成内容冒充正式测评资产。
@@ -72,3 +73,15 @@ python scripts/import_v18_diagnostic_questions.py scripts/v18_diagnostic_questio
 仓库另附 `backend/scripts/v18_v142_engineering_samples.json`：它是明确标注为“非学科人工审校”的工程验证样例，只用于验证已激活的 v142 内容包能被受控题库读取。正式发布前必须由学科审核人以同一导入格式替换或复审。
 
 2026-11-23 已对本机 active `v142` 运行该工程样例导入，结果为 `created: 1, skipped: 0`。
+
+## 可复现工程样例输出
+
+已执行 `python scripts/run_v18_engineering_acceptance.py`，输出保存在：
+
+`docs/releases/v1.8/engineering-sample-output.json`
+
+该次实际运行使用 v142 的已发布工程题，生成 1 条已确认诊断结论和 3 个周计划项。脚本会创建名称带随机标识的工程学生、目标、诊断和计划记录，保留它们以便本机复核；这些记录不是用户数据。
+
+## 学科审校交接
+
+正式诊断题仍必须由真实学科审核人复核；工程不得将样例伪称为审校完成。审核清单、导入命令与质量边界见 [subject_review_handoff.md](subject_review_handoff.md)。

@@ -53,6 +53,7 @@ class DiagnosticAnswer(Base):
     suggested_score: Mapped[int | None] = mapped_column(Integer)
     suggestion_basis: Mapped[dict | None] = mapped_column(JSON)
     final_score: Mapped[int | None] = mapped_column(Integer)
+    final_score_reason: Mapped[str | None] = mapped_column(Text)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

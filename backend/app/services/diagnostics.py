@@ -133,6 +133,25 @@ def save_answer(db: Session, *, session: DiagnosticSession, question_id: int, ra
     return answer
 
 
+def retry_subjective_suggestion(db: Session, *, session: DiagnosticSession, question_id: int) -> DiagnosticAnswer:
+    """在不丢失已保存原答的前提下重新请求主观题评分建议。"""
+    if session.status != "in_progress":
+        raise ValueError("诊断已提交，不能重新评分")
+    answer = db.query(DiagnosticAnswer).filter(
+        DiagnosticAnswer.session_id == session.id,
+        DiagnosticAnswer.question_id == question_id,
+    ).one_or_none()
+    question = db.get(DiagnosticQuestion, question_id)
+    if answer is None or question is None or question.question_type == "objective":
+        raise ValueError("只能重新请求该诊断中的主观题评分建议")
+    if answer.raw_answer is None:
+        raise ValueError("请先保存主观题答案")
+    answer.suggested_score, answer.suggestion_basis = _suggest_subjective_score(question, answer.raw_answer)
+    db.commit()
+    db.refresh(answer)
+    return answer
+
+
 def submit_diagnostic(db: Session, *, session: DiagnosticSession) -> list[DiagnosticKnowledgeResult]:
     """提交已确认的诊断，按知识点持久化可追溯结论。"""
     if session.status == "submitted":

@@ -11,6 +11,35 @@ from app.models.learning import LearningGoal, LearningPlanItem, LearningPlanVers
 from app.models.memory import Memory, ReviewPlan
 
 
+_MASTERY_RANK = {"不懂": 0, "基本会": 1, "熟练": 2, "精通": 3}
+
+
+def resolve_learning_evidence(*, diagnostic: dict | None, memory: dict | None) -> dict:
+    """解析诊断与长期记忆；冲突时保留可审计的选择理由。"""
+    diagnostic = diagnostic or {}
+    memory = memory or {}
+    diagnostic_mastery = diagnostic.get("mastery")
+    memory_mastery = memory.get("mastery")
+    if not diagnostic_mastery and not memory_mastery:
+        return {"mastery": None, "source": "none", "conflict": False, "reason": "暂无掌握证据"}
+    if not diagnostic_mastery:
+        return {"mastery": memory_mastery, "source": "memory", "conflict": False, "reason": "采用既有掌握记忆"}
+    if not memory_mastery:
+        return {"mastery": diagnostic_mastery, "source": "diagnostic", "conflict": False, "reason": "采用已确认诊断"}
+    if diagnostic_mastery == memory_mastery:
+        return {"mastery": diagnostic_mastery, "source": "consistent", "conflict": False, "reason": "诊断与既有记忆一致"}
+
+    diagnostic_at = diagnostic.get("confirmed_at")
+    memory_at = memory.get("observed_at")
+    if diagnostic_at and memory_at:
+        if diagnostic_at >= memory_at:
+            return {"mastery": diagnostic_mastery, "source": "diagnostic", "conflict": True, "reason": "诊断与既有记忆冲突，采用较新的诊断"}
+        return {"mastery": memory_mastery, "source": "memory", "conflict": True, "reason": "诊断与既有记忆冲突，采用较新的掌握记忆"}
+
+    conservative = min((diagnostic_mastery, memory_mastery), key=lambda value: _MASTERY_RANK.get(value, -1))
+    return {"mastery": conservative, "source": "conservative", "conflict": True, "reason": "诊断与既有记忆冲突且时间不可比较，采用保守掌握度"}
+
+
 def generate_learning_plan(db: Session, *, student_id: int, goal_id: int, adjustment_reason: str = "initial") -> LearningPlanVersion:
     goal = db.get(LearningGoal, goal_id)
     if goal is None or goal.student_id != student_id or goal.current_version is None:
@@ -52,17 +81,23 @@ def generate_learning_plan(db: Session, *, student_id: int, goal_id: int, adjust
     for sequence, kp_id in enumerate(ordered, 1):
         point = points.get(kp_id)
         if not point: continue
-        result = results.get(kp_id); memory = memory_by_kp.get(kp_id); mastery = result.mastery if result else (memory.mastery if memory else None)
+        result = results.get(kp_id); memory = memory_by_kp.get(kp_id)
+        evidence = resolve_learning_evidence(
+            diagnostic={"mastery": result.mastery, "confirmed_at": session.submitted_at} if result and result.mastery else None,
+            memory={"mastery": memory.mastery, "observed_at": memory.updated_at or memory.last_reviewed_at or memory.created_at} if memory else None,
+        )
+        mastery = evidence["mastery"]
         is_target = kp_id in target_ids
         if not is_target and mastery == "熟练": continue
         minutes = {"基础": 30, "进阶": 45, "拔高": 60}.get(point.difficulty, 30)
         is_scheduled = scheduled + minutes <= capacity
         reasons = ["当前学习目标" if is_target else "知识图谱中的前置知识"]
-        reasons.append("暂无诊断证据，建议补测或基础学习" if result is None else f"诊断掌握度为{mastery}")
+        reasons.append("暂无诊断证据，建议补测或基础学习" if result is None else f"诊断掌握度为{result.mastery}")
+        reasons.append(evidence["reason"])
         if wrong_counts.get(kp_id): reasons.append(f"存在 {wrong_counts[kp_id]} 道未掌握错题")
         if kp_id in due_ids: reasons.append("知识点复习已到期")
         if memory and result is None: reasons.append(f"既有掌握记忆为{memory.mastery}")
-        db.add(LearningPlanItem(plan_version_id=plan.id, week_no=(scheduled // goal_version.weekly_minutes) + 1 if is_scheduled else None, sequence_no=sequence, knowledge_point_id=kp_id, estimated_minutes=minutes, recommendation_reasons=reasons, completion_condition="完成对应学习并通过后续练习确认", evidence_json={"diagnostic_result_id": result.id if result else None, "memory_id": memory.id if memory else None, "wrong_count": wrong_counts.get(kp_id, 0), "review_due": kp_id in due_ids}, scheduled=is_scheduled))
+        db.add(LearningPlanItem(plan_version_id=plan.id, week_no=(scheduled // goal_version.weekly_minutes) + 1 if is_scheduled else None, sequence_no=sequence, knowledge_point_id=kp_id, estimated_minutes=minutes, recommendation_reasons=reasons, completion_condition="完成对应学习并通过后续练习确认", evidence_json={"diagnostic_result_id": result.id if result else None, "memory_id": memory.id if memory else None, "wrong_count": wrong_counts.get(kp_id, 0), "review_due": kp_id in due_ids, "resolution": evidence}, scheduled=is_scheduled))
         if is_scheduled: scheduled += minutes
     plan.scheduled_minutes = scheduled; plan.missing_minutes = max(0, sum(item.estimated_minutes for item in db.query(LearningPlanItem).filter(LearningPlanItem.plan_version_id == plan.id, LearningPlanItem.scheduled == False).all()))
     plan.status = "needs_adjustment" if plan.missing_minutes else "current"

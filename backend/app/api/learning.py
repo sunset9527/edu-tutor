@@ -13,7 +13,7 @@ from app.models.learning import LearningGoal, LearningPlanItem, LearningPlanVers
 from app.models.diagnostics import DiagnosticAnswer, DiagnosticKnowledgeResult, DiagnosticQuestion, DiagnosticSession
 from app.models.knowledge import KnowledgePoint
 from app.models.knowledge_governance import KnowledgeSourceChunk
-from app.services.diagnostics import diagnostic_scope_knowledge_point_ids, save_answer, start_or_resume_diagnostic, submit_diagnostic
+from app.services.diagnostics import diagnostic_scope_knowledge_point_ids, retry_subjective_suggestion, save_answer, start_or_resume_diagnostic, submit_diagnostic
 from app.services.learning_plans import generate_learning_plan
 from app.services.learning_goals import append_learning_goal_version, create_learning_goal
 
@@ -51,6 +51,7 @@ class DiagnosticAnswerSave(BaseModel):
 
 class DiagnosticScoreConfirm(BaseModel):
     final_score: int = Field(ge=0)
+    final_score_reason: str | None = Field(default=None, max_length=500)
 
 
 class LearningPlanCreate(BaseModel):
@@ -89,7 +90,7 @@ def _session_payload(db: Session, session: DiagnosticSession) -> dict:
         knowledge_version_id=session.knowledge_version_id,
     )
     covered_ids = {question.knowledge_point_id for question in questions.values()}
-    return {"id": session.id, "status": session.status, "goal_version_id": session.goal_version_id, "knowledge_version_id": session.knowledge_version_id, "missing_question_knowledge_point_ids": [knowledge_point_id for knowledge_point_id in scope_ids if knowledge_point_id not in covered_ids], "questions": [{"question_id": answer.question_id, "stem": questions[answer.question_id].stem, "question_type": questions[answer.question_id].question_type, "options": questions[answer.question_id].options_json, "raw_answer": answer.raw_answer, "suggested_score": answer.suggested_score, "suggestion_basis": answer.suggestion_basis, "final_score": answer.final_score, "confirmed": answer.confirmed_at is not None} for answer in answers]}
+    return {"id": session.id, "status": session.status, "goal_version_id": session.goal_version_id, "knowledge_version_id": session.knowledge_version_id, "missing_question_knowledge_point_ids": [knowledge_point_id for knowledge_point_id in scope_ids if knowledge_point_id not in covered_ids], "questions": [{"question_id": answer.question_id, "stem": questions[answer.question_id].stem, "question_type": questions[answer.question_id].question_type, "options": questions[answer.question_id].options_json, "raw_answer": answer.raw_answer, "suggested_score": answer.suggested_score, "suggestion_basis": answer.suggestion_basis, "final_score": answer.final_score, "final_score_reason": answer.final_score_reason, "confirmed": answer.confirmed_at is not None} for answer in answers]}
 
 
 def _plan_payload(db: Session, plan: LearningPlanVersion, *, stale: bool = False) -> dict:
@@ -193,13 +194,29 @@ def confirm_subjective_score(session_id: int, question_id: int, payload: Diagnos
     question = db.get(DiagnosticQuestion, question_id)
     if answer is None or question is None or question.question_type == "objective":
         raise HTTPException(status_code=400, detail="只能确认该诊断中的主观题")
+    if session.status != "in_progress":
+        raise HTTPException(status_code=400, detail="诊断已提交，不能修改分数")
     if payload.final_score > question.max_score:
         raise HTTPException(status_code=400, detail="确认分数超过题目满分")
     answer.final_score = payload.final_score
+    answer.final_score_reason = payload.final_score_reason
     answer.confirmed_at = datetime.now()
     answer.suggestion_basis = {**(answer.suggestion_basis or {}), "confirmed_by": "student"}
     db.commit()
-    return {"id": answer.id, "final_score": answer.final_score, "confirmed": True}
+    return {"id": answer.id, "final_score": answer.final_score, "final_score_reason": answer.final_score_reason, "confirmed": True}
+
+
+@router.post("/diagnostics/{session_id}/answers/{question_id}/retry-suggestion")
+def retry_diagnostic_suggestion(session_id: int, question_id: int, db: Session = Depends(get_db), user_id: int = Depends(require_current_user_id)):
+    session = db.get(DiagnosticSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="诊断不存在")
+    get_owned_student(db, session.student_id, user_id)
+    try:
+        answer = retry_subjective_suggestion(db, session=session, question_id=question_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"id": answer.id, "suggested_score": answer.suggested_score, "suggestion_basis": answer.suggestion_basis}
 
 
 @router.post("/diagnostics/{session_id}/submit")

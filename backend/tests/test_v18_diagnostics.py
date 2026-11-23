@@ -14,7 +14,7 @@ def test_diagnostic_session_and_answers_preserve_fixed_evidence():
     assert {"student_id", "goal_version_id", "knowledge_version_id", "status"} <= set(
         module.DiagnosticSession.__table__.columns.keys()
     )
-    assert {"session_id", "question_id", "raw_answer", "final_score", "confirmed_at"} <= set(
+    assert {"session_id", "question_id", "raw_answer", "final_score", "final_score_reason", "confirmed_at"} <= set(
         module.DiagnosticAnswer.__table__.columns.keys()
     )
 

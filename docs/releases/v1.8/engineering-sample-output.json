@@ -1,0 +1,58 @@
+{
+  "kind": "engineering_acceptance_fixture",
+  "warning": "此文件只证明工程流程可复现，不代表真实学生效果或学科人工审校。",
+  "knowledge_version_id": 142,
+  "goal": {
+    "id": 22,
+    "version_id": 52
+  },
+  "diagnostic_report": [
+    {
+      "knowledge_point_id": 1736,
+      "mastery": "熟练",
+      "evidence_status": "confirmed",
+      "score_rate": 1.0
+    }
+  ],
+  "learning_plan": {
+    "id": 12,
+    "status": "current",
+    "scheduled_minutes": 90,
+    "missing_minutes": 0,
+    "items": [
+      {
+        "knowledge_point_id": 1734,
+        "week_no": 1,
+        "estimated_minutes": 30,
+        "scheduled": true,
+        "reasons": [
+          "知识图谱中的前置知识",
+          "暂无诊断证据，建议补测或基础学习",
+          "暂无掌握证据"
+        ]
+      },
+      {
+        "knowledge_point_id": 1735,
+        "week_no": 1,
+        "estimated_minutes": 30,
+        "scheduled": true,
+        "reasons": [
+          "知识图谱中的前置知识",
+          "暂无诊断证据，建议补测或基础学习",
+          "暂无掌握证据"
+        ]
+      },
+      {
+        "knowledge_point_id": 1736,
+        "week_no": 1,
+        "estimated_minutes": 30,
+        "scheduled": true,
+        "reasons": [
+          "当前学习目标",
+          "诊断掌握度为熟练",
+          "采用已确认诊断"
+        ]
+      }
+    ]
+  }
+}
