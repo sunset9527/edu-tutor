@@ -10,6 +10,8 @@ from app.core.database import SessionLocal
 from app.main import app
 from app.models.knowledge import KnowledgePoint
 from app.models.knowledge_governance import KnowledgeSourceChunk, KnowledgeVersion, Textbook
+from app.models.diagnostics import DiagnosticAnswer, DiagnosticKnowledgeResult, DiagnosticQuestion, DiagnosticSession
+from app.models.learning import LearningPlanItem, LearningPlanVersion
 from app.models.learning import LearningGoal, LearningGoalTarget, LearningGoalVersion
 from app.models.student import Student
 from app.models.user import User
@@ -31,7 +33,7 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         source_kind="fixture",
     )
     student = Student(name=f"v18-goal-{token}", grade="二年级", subject="数学")
-    student_id = user_id = other_user_id = textbook_id = version_id = chunk_id = target_id = None
+    student_id = user_id = other_user_id = textbook_id = version_id = chunk_id = target_id = question_id = None
     try:
         db.add_all([user, other_user, textbook, student])
         db.flush()
@@ -68,6 +70,20 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
             provenance_gap=False,
         )
         db.add(target)
+        db.flush()
+        question = DiagnosticQuestion(
+            knowledge_version_id=version.id,
+            knowledge_point_id=target.id,
+            source_chunk_id=chunk.id,
+            question_type="objective",
+            difficulty="基础",
+            stem="1 + 1 = ?",
+            options_json=["1", "2"],
+            answer_key_json={"value": "2"},
+            max_score=1,
+            status="published",
+        )
+        db.add(question)
         db.commit()
         student_id = student.id
         user_id = user.id
@@ -76,6 +92,7 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         version_id = version.id
         chunk_id = chunk.id
         target_id = target.id
+        question_id = question.id
         db.close()
 
         created = client.post(
@@ -99,6 +116,34 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
         assert goal.current_version.knowledge_version_id == version_id
         assert [item.knowledge_point_id for item in goal.current_version.targets] == [target_id]
         assert goal.current_version.status == "active"
+
+        diagnostic = client.post(
+            "/api/learning/diagnostics",
+            headers={"Authorization": f"Bearer {create_token(user_id)}"},
+            json={"student_id": student_id, "goal_id": goal.id},
+        )
+        assert diagnostic.status_code == 201
+        session_id = diagnostic.json()["id"]
+        saved = client.put(
+            f"/api/learning/diagnostics/{session_id}/answers/{question_id}",
+            headers={"Authorization": f"Bearer {create_token(user_id)}"},
+            json={"raw_answer": {"value": "2"}, "elapsed_seconds": 8, "confidence": 4},
+        )
+        assert saved.status_code == 200
+        assert saved.json()["final_score"] == 1
+        submitted = client.post(
+            f"/api/learning/diagnostics/{session_id}/submit",
+            headers={"Authorization": f"Bearer {create_token(user_id)}"},
+        )
+        assert submitted.status_code == 200
+        assert submitted.json()["results"][0]["mastery"] == "熟练"
+        planned = client.post(
+            "/api/learning/plans",
+            headers={"Authorization": f"Bearer {create_token(user_id)}"},
+            json={"student_id": student_id, "goal_id": goal.id},
+        )
+        assert planned.status_code == 201
+        assert planned.json()["items"][0]["knowledge_point_id"] == target_id
 
         updated = append_learning_goal_version(
             db,
@@ -142,6 +187,27 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
             {"current_version_id": None}, synchronize_session=False
         )
         db.flush()
+        session_ids = db.query(DiagnosticSession.id).filter(
+            DiagnosticSession.student_id == student_id
+        )
+        plan_ids = db.query(LearningPlanVersion.id).filter(
+            LearningPlanVersion.student_id == student_id
+        )
+        db.query(LearningPlanItem).filter(
+            LearningPlanItem.plan_version_id.in_(plan_ids)
+        ).delete(synchronize_session=False)
+        db.query(LearningPlanVersion).filter(
+            LearningPlanVersion.student_id == student_id
+        ).delete(synchronize_session=False)
+        db.query(DiagnosticKnowledgeResult).filter(
+            DiagnosticKnowledgeResult.session_id.in_(session_ids)
+        ).delete(synchronize_session=False)
+        db.query(DiagnosticAnswer).filter(
+            DiagnosticAnswer.session_id.in_(session_ids)
+        ).delete(synchronize_session=False)
+        db.query(DiagnosticSession).filter(
+            DiagnosticSession.student_id == student_id
+        ).delete(synchronize_session=False)
         db.query(LearningGoalTarget).filter(
             LearningGoalTarget.goal_version_id.in_(
                 db.query(LearningGoalVersion.id).filter(LearningGoalVersion.goal_id.in_(
@@ -155,6 +221,9 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
             )
         ).delete(synchronize_session=False)
         db.query(LearningGoal).filter(LearningGoal.student_id == student_id).delete(
+            synchronize_session=False
+        )
+        db.query(DiagnosticQuestion).filter(DiagnosticQuestion.id == question_id).delete(
             synchronize_session=False
         )
         db.query(KnowledgePoint).filter(KnowledgePoint.id == target_id).delete(

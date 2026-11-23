@@ -4,7 +4,8 @@ from app.models.user import User
 from app.models.session import Session, Message
 from app.models.memory import Memory, MemoryConflict, ReviewPlan
 from app.models.knowledge import KnowledgePoint, KnowledgePointLink, WrongQuestion
-from app.models.learning import LearningGoal, LearningGoalTarget, LearningGoalVersion
+from app.models.learning import LearningGoal, LearningGoalTarget, LearningGoalVersion, LearningPlanItem, LearningPlanVersion
+from app.models.diagnostics import DiagnosticAnswer, DiagnosticKnowledgeResult, DiagnosticQuestion, DiagnosticSession
 from app.models.setting import SystemSetting
 from app.models.learning_event import LearningEvent
 from app.models.knowledge_governance import (
@@ -35,6 +36,12 @@ __all__ = [
     "LearningGoal",
     "LearningGoalVersion",
     "LearningGoalTarget",
+    "LearningPlanVersion",
+    "LearningPlanItem",
+    "DiagnosticQuestion",
+    "DiagnosticSession",
+    "DiagnosticAnswer",
+    "DiagnosticKnowledgeResult",
     "SystemSetting",
     "LearningEvent",
     "Textbook",

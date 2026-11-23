@@ -39,3 +39,4 @@
 - 目标版本追加可安全复制上一版本的 `knowledge_version_id`、学科、目标水平和目标知识点；目标日期、每周时间、状态与调整原因是本次变更字段。
 - `GET /api/learning/goals/{student_id}` 已由既有学生归属校验保护；所有后续学习 API 应在任何资源查询前调用同一校验。
 - FastAPI TestClient 使用独立 session 提交时，测试夹具的原 Session 不能保持开启并用于清理；创建 HTTP 请求前关闭它，之后用新 Session 读取和清理即可避免 InnoDB 锁等待。
+- 诊断题表已以受控 `knowledge_version_id`、`knowledge_point_id`、`source_chunk_id` 三重引用落库；题目表本身不接受缺少来源的知识点。

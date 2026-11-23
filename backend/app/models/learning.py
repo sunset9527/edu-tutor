@@ -5,7 +5,7 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, relationship, mapped_column
 
 from app.core.database import Base
@@ -96,3 +96,34 @@ class LearningGoalTarget(Base):
     __table_args__ = (
         UniqueConstraint("goal_version_id", "knowledge_point_id", name="uk_goal_target"),
     )
+
+
+class LearningPlanVersion(Base):
+    __tablename__ = "learning_plan_versions"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    student_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    goal_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("learning_goals.id"), nullable=False)
+    goal_version_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("learning_goal_versions.id"), nullable=False)
+    diagnostic_session_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("diagnostic_sessions.id"))
+    knowledge_version_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("knowledge_versions.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="current")
+    adjustment_reason: Mapped[str] = mapped_column(String(50), nullable=False, default="initial")
+    total_available_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    scheduled_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    missing_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    evidence_snapshot: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class LearningPlanItem(Base):
+    __tablename__ = "learning_plan_items"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    plan_version_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("learning_plan_versions.id", ondelete="CASCADE"), nullable=False)
+    week_no: Mapped[int | None] = mapped_column(Integer)
+    sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    knowledge_point_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("knowledge_points.id"), nullable=False)
+    estimated_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    recommendation_reasons: Mapped[list | None] = mapped_column(JSON)
+    completion_condition: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_json: Mapped[dict | None] = mapped_column(JSON)
+    scheduled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

@@ -1,0 +1,34 @@
+<template>
+  <div class="page">
+    <el-card shadow="never">
+      <template #header><div class="head"><span>学习目标、诊断与周计划</span><el-select v-model="studentId" placeholder="选择学生" style="width:180px" @change="loadGoal"><el-option v-for="s in students" :key="s.id" :label="s.name" :value="s.id" /></el-select></div></template>
+      <el-empty v-if="!studentId" description="请选择学生" />
+      <template v-else>
+        <el-alert v-if="error" :title="error" type="warning" show-icon :closable="false" style="margin-bottom:12px" />
+        <section v-if="!goal"><h3>1. 设置学习目标</h3><el-form inline><el-form-item label="目标日期"><el-date-picker v-model="form.target_date" value-format="YYYY-MM-DD" type="date" /></el-form-item><el-form-item label="每周分钟"><el-input-number v-model="form.weekly_minutes" :min="30" :step="30" /></el-form-item><el-form-item label="目标水平"><el-select v-model="form.target_level" style="width:100px"><el-option label="基本会" value="基本会"/><el-option label="熟练" value="熟练"/></el-select></el-form-item></el-form><el-select v-model="form.target_knowledge_point_ids" multiple filterable placeholder="选择目标知识点" style="width:100%"><el-option v-for="n in graph.nodes" :key="n.id" :label="n.title" :value="n.id" /></el-select><el-button style="margin-top:12px" type="primary" :loading="loading" @click="createGoal">创建目标</el-button></section>
+        <section v-else>
+          <h3>1. 当前目标 <el-tag>{{ goal.current_version.status }}</el-tag></h3><p>目标日期：{{ goal.current_version.target_date }} · 每周 {{ goal.current_version.weekly_minutes }} 分钟 · 版本 v{{ goal.current_version.version_no }}</p>
+          <el-space><el-button type="primary" :loading="loading" @click="start">2. 开始/继续诊断</el-button><el-button :disabled="!session || session.status !== 'submitted'" @click="makePlan">3. 生成周计划</el-button><el-button v-if="goal.current_version.status==='active'" @click="changeStatus('paused')">暂停</el-button><el-button v-else-if="goal.current_version.status==='paused'" @click="changeStatus('active')">恢复</el-button></el-space>
+          <div v-if="session" class="block"><h3>诊断测评</h3><div v-for="q in session.questions" :key="q.question_id" class="question"><p>{{ q.stem }}</p><el-radio-group v-if="q.options?.length" v-model="answers[q.question_id]"><el-radio v-for="o in q.options" :key="o" :label="o">{{ o }}</el-radio></el-radio-group><el-input v-else v-model="answers[q.question_id]" placeholder="输入答案"/><el-button size="small" style="margin-left:8px" @click="save(q.question_id)">保存</el-button><el-tag v-if="q.confirmed" type="success" size="small">已确认 {{ q.final_score ?? '' }}</el-tag></div><el-button type="primary" :disabled="session.status==='submitted'" @click="submit">提交诊断</el-button><div v-if="results.length"><h4>诊断报告</h4><el-tag v-for="r in results" :key="r.knowledge_point_id" :type="r.evidence_status==='no_evidence'?'info':'success'">知识点 {{ r.knowledge_point_id }}：{{ r.mastery || '暂无证据' }}</el-tag></div></div>
+          <div v-if="plan" class="block"><h3>周学习计划 <el-tag :type="plan.status==='needs_adjustment'?'warning':'success'">{{ plan.status }}</el-tag></h3><p>已排 {{ plan.scheduled_minutes }} 分钟；未排 {{ plan.missing_minutes }} 分钟。</p><el-table :data="plan.items"><el-table-column prop="week_no" label="周次"/><el-table-column prop="knowledge_point_id" label="知识点"/><el-table-column prop="estimated_minutes" label="预计分钟"/><el-table-column label="推荐原因"><template #default="s">{{ s.row.reasons.join('；') }}</template></el-table-column><el-table-column label="状态"><template #default="s">{{ s.row.scheduled ? '已排入' : '容量不足' }}</template></el-table-column></el-table></div>
+        </section>
+      </template>
+    </el-card>
+  </div>
+</template>
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { eduApi, type DiagnosticSessionResponse, type GraphData, type LearningGoalResponse, type LearningPlanResponse, type Student } from '../api/edu'
+const students=ref<Student[]>([]), studentId=ref<number>(), graph=ref<GraphData>({nodes:[],edges:[]}), goal=ref<LearningGoalResponse>(), session=ref<DiagnosticSessionResponse>(), plan=ref<LearningPlanResponse>(), results=ref<any[]>([]), loading=ref(false), error=ref('')
+const answers=ref<Record<number,string>>({}); const form=ref({target_date:'',weekly_minutes:120,target_level:'熟练',target_knowledge_point_ids:[] as number[]})
+async function loadGoal(){ error.value=''; session.value=undefined; plan.value=undefined; results.value=[]; if(!studentId.value)return; try{goal.value=await eduApi.getLearningGoal(studentId.value)}catch{goal.value=undefined} }
+async function createGoal(){if(!studentId.value||!form.value.target_date||!form.value.target_knowledge_point_ids.length)return ElMessage.warning('请完整填写目标');loading.value=true;try{goal.value=await eduApi.createLearningGoal({...form.value,student_id:studentId.value,subject:'数学'});ElMessage.success('目标已创建')}catch(e:any){error.value=e?.response?.data?.detail||'创建失败'}finally{loading.value=false}}
+async function start(){if(!goal.value||!studentId.value)return;try{session.value=await eduApi.startDiagnostic({student_id:studentId.value,goal_id:goal.value.id});for(const q of session.value.questions)answers.value[q.question_id]=String(q.raw_answer?.value||'')}catch(e:any){error.value=e?.response?.data?.detail||'无法开始诊断'}}
+async function save(id:number){if(!session.value)return;try{const r=await eduApi.saveDiagnosticAnswer(session.value.id,id,{raw_answer:{value:answers.value[id]||''}});const q=session.value.questions.find(x=>x.question_id===id);if(q){q.final_score=r.final_score;q.confirmed=r.confirmed}}catch(e:any){error.value=e?.response?.data?.detail||'保存失败'}}
+async function submit(){if(!session.value)return;try{const r=await eduApi.submitDiagnostic(session.value.id);session.value.status=r.status;results.value=r.results}catch(e:any){error.value=e?.response?.data?.detail||'请确认所有作答'}}
+async function makePlan(){if(!goal.value||!studentId.value)return;try{plan.value=await eduApi.createLearningPlan({student_id:studentId.value,goal_id:goal.value.id})}catch(e:any){error.value=e?.response?.data?.detail||'生成失败'}}
+async function changeStatus(status:'active'|'paused'){if(!goal.value)return;goal.value=await eduApi.updateLearningGoal(goal.value.id,{status,change_reason:status==='active'?'resumed':'paused'})}
+onMounted(async()=>{students.value=await eduApi.listStudents();graph.value=await eduApi.getGraph('数学');if(students.value.length){studentId.value=students.value[0].id;await loadGoal()}})
+</script>
+<style scoped>.page{height:100%;overflow:auto}.head{display:flex;justify-content:space-between;align-items:center}.block,section{margin-top:20px}.question{padding:12px;border:1px solid #ebeef5;border-radius:6px;margin:8px 0}</style>

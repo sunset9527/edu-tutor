@@ -186,6 +186,26 @@ export interface WrongQuestionCreate {
   knowledge_point_id?: number | null
 }
 
+export interface LearningGoalResponse {
+  id: number
+  student_id: number
+  current_version: { id: number; version_no: number; knowledge_version_id: number; target_date: string; weekly_minutes: number; subject: string; target_level: string; status: string; change_reason: string; target_knowledge_point_ids: number[] }
+}
+export interface DiagnosticSessionResponse {
+  id: number
+  status: string
+  goal_version_id: number
+  knowledge_version_id: number
+  questions: Array<{ question_id: number; stem: string; question_type: string; options?: string[]; raw_answer?: Record<string, unknown> | null; final_score?: number | null; confirmed: boolean }>
+}
+export interface LearningPlanResponse {
+  id: number
+  status: string
+  scheduled_minutes: number
+  missing_minutes: number
+  items: Array<{ knowledge_point_id: number; week_no?: number | null; estimated_minutes: number; reasons: string[]; scheduled: boolean }>
+}
+
 export const eduApi = {
   // 学生
   listStudents: () => client.get<Student[]>('/students').then((r) => r.data),
@@ -249,6 +269,15 @@ export const eduApi = {
       .then((r) => r.data),
   getSubjects: () =>
     client.get<{ subjects: string[] }>('/knowledge/subjects').then((r) => r.data.subjects),
+
+  // v1.8 学习目标、诊断与计划
+  getLearningGoal: (studentId: number) => client.get<LearningGoalResponse>(`/learning/goals/${studentId}`).then((r) => r.data),
+  createLearningGoal: (data: { student_id: number; target_date: string; weekly_minutes: number; subject: string; target_level: string; target_knowledge_point_ids: number[] }) => client.post<LearningGoalResponse>('/learning/goals', data).then((r) => r.data),
+  updateLearningGoal: (goalId: number, data: { target_date?: string; weekly_minutes?: number; status?: 'active' | 'paused' | 'ended'; change_reason: string }) => client.patch<LearningGoalResponse>(`/learning/goals/${goalId}`, data).then((r) => r.data),
+  startDiagnostic: (data: { student_id: number; goal_id: number }) => client.post<DiagnosticSessionResponse>('/learning/diagnostics', data).then((r) => r.data),
+  saveDiagnosticAnswer: (sessionId: number, questionId: number, data: { raw_answer: Record<string, unknown>; elapsed_seconds?: number; confidence?: number }) => client.put<{ final_score: number | null; confirmed: boolean }>(`/learning/diagnostics/${sessionId}/answers/${questionId}`, data).then((r) => r.data),
+  submitDiagnostic: (sessionId: number) => client.post<{ status: string; results: Array<{ knowledge_point_id: number; mastery?: string; evidence_status: string; score_rate?: number }> }>(`/learning/diagnostics/${sessionId}/submit`).then((r) => r.data),
+  createLearningPlan: (data: { student_id: number; goal_id: number; adjustment_reason?: string }) => client.post<LearningPlanResponse>('/learning/plans', data).then((r) => r.data),
 
   // 参数后台（v1.1）
   getSettings: () => client.get('/settings').then((r) => r.data),
