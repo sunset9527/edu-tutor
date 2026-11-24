@@ -233,6 +233,17 @@ def test_creating_goal_pins_active_knowledge_version_and_first_version():
             headers={"Authorization": f"Bearer {create_token(other_user_id)}"},
         )
         assert foreign.status_code == 404
+        db.query(Textbook).filter(Textbook.id == textbook_id).update(
+            {"active_version_id": None}, synchronize_session=False
+        )
+        db.commit()
+        blocked_after_version_switch = client.post(
+            "/api/learning/diagnostics",
+            headers={"Authorization": f"Bearer {create_token(user_id)}"},
+            json={"student_id": student_id, "goal_id": goal.id},
+        )
+        assert blocked_after_version_switch.status_code == 400
+        assert "已切换" in blocked_after_version_switch.json()["detail"]
     finally:
         db.rollback()
         db.query(LearningGoal).filter(LearningGoal.student_id == student_id).update(

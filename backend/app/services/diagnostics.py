@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.diagnostics import DiagnosticAnswer, DiagnosticKnowledgeResult, DiagnosticQuestion, DiagnosticSession
 from app.models.knowledge import KnowledgePoint, KnowledgePointLink
+from app.models.knowledge_governance import Textbook
 from app.models.learning import LearningGoal, LearningGoalTarget
 
 
@@ -77,6 +78,12 @@ def start_or_resume_diagnostic(db: Session, *, student_id: int, goal_id: int) ->
     version = goal.current_version
     if version.status != "active":
         raise ValueError("学习目标当前未启用")
+    active_textbook = db.query(Textbook).filter(
+        Textbook.active_version_id == version.knowledge_version_id,
+        Textbook.subject == version.subject,
+    ).one_or_none()
+    if active_textbook is None:
+        raise ValueError("教材 active 知识版本已切换，请创建兼容的新目标版本后再开始诊断")
     existing = db.query(DiagnosticSession).filter(
         DiagnosticSession.student_id == student_id,
         DiagnosticSession.goal_version_id == version.id,

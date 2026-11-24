@@ -24,7 +24,7 @@ def run(path: Path, version_id: int = 142) -> dict:
                 raise ValueError("题目知识点必须属于目标版本且有来源块")
             existing=db.query(DiagnosticQuestion).filter(DiagnosticQuestion.knowledge_version_id==version_id,DiagnosticQuestion.knowledge_point_id==point.id,DiagnosticQuestion.stem==row.get("stem")).first()
             if existing: continue
-            db.add(DiagnosticQuestion(knowledge_version_id=version_id,knowledge_point_id=point.id,source_chunk_id=point.source_chunk_id,question_type=row["question_type"],difficulty=row.get("difficulty",point.difficulty),stem=row["stem"],options_json=row.get("options"),answer_key_json=row.get("answer_key"),rubric_json=row.get("rubric"),max_score=row.get("max_score",1),status="published")); created+=1
+            db.add(DiagnosticQuestion(knowledge_version_id=version_id,knowledge_point_id=point.id,source_chunk_id=point.source_chunk_id,question_type=row["question_type"],difficulty=row.get("difficulty",point.difficulty),stem=row["stem"],options_json=row.get("options"),answer_key_json=row.get("answer_key"),rubric_json=row.get("rubric"),max_score=row.get("max_score",1),status="published",reviewed_by=row["reviewed_by"],review_note=row["review_note"])); created+=1
         db.commit(); return {"version_id":version_id,"created":created,"skipped":len(rows)-created}
     finally: db.close()
 if __name__=="__main__":
