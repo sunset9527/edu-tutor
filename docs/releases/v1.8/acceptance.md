@@ -1,6 +1,7 @@
 # EduTutor v1.8 验收记录
 
-验收日期：2026-11-23
+验收日期：2026-11-24
+阶段状态：完成（AI 初审演示题库口径）
 版本主题：诊断测评、学习目标与个性化计划
 
 ## 已验证闭环
@@ -17,6 +18,7 @@
 8. 目标修改生成新版本；旧计划在查询计划历史时被标记为 `stale`。
 9. 刷新页面可恢复最近诊断；报告返回知识点教材来源页范围。
 10. 其他账号读取学生目标时被拒绝。
+11. 已发布诊断题保存审计信息且受数据库不可变保护；教材 active 版本切换后不能用旧目标新开诊断。
 
 这证明工程流程与数据边界，不代表真实学生学习效果，也不把工程夹具题目表述为教师审定测评题。
 
@@ -27,7 +29,7 @@ cd backend
 python scripts/check_v18_migration_roundtrip.py
 ```
 
-随机临时库成功升级至 `f3b7a9c2d614`，降级至 `7efb3126a01c` 后诊断表消失，再升级后所有 v1.8 诊断/计划表及 `diagnostic_answers.final_score_reason` 恢复。
+随机临时库成功升级至 `b6e2c8f4a913`，降级至 `7efb3126a01c` 后诊断表消失，再升级后所有 v1.8 表、评分理由、审核审计字段和已发布题不可变触发器恢复。
 
 ## 已执行命令
 
@@ -57,14 +59,14 @@ npm run build
 
 PDF 提取测试现为可选本机集成测试：默认使用开发机教材路径；其他环境若没有该文件会显示 `skipped`，不会被误判为回归失败。可通过 `EDUTUTOR_PDF_FIXTURE` 指定自己的可用 PDF 后启用该项验证。
 
-## 已知范围
+## 阶段边界
 
 - 主观题保存答案并保持未确认状态；没有实际可用评分模型建议时，不会伪造分数或把它写成掌握证据。
-- 当前 real `v142` 内容包尚未导入教师审校的正式诊断题；路由只会使用已发布且绑定来源块的题目。工程集成测试使用独立受控夹具。
+- 当前 v142 使用 AI 初审演示题库；路由只会使用已发布且绑定来源块的题目。AI 初审不构成教师审校、官方教材认证或真实学习效果结论。
 
-## v142 人工审校题目导入
+## v142 可审计题目导入
 
-仓库提供 `backend/scripts/v18_diagnostic_question_template.json` 模板和受控导入器。只有包含 `reviewed_by` 与 `review_note` 的人工审校题目才能发布：
+仓库提供 `backend/scripts/v18_diagnostic_question_template.json` 模板和受控导入器。导入器接受真实人工审校的 `human_review`，或结论为 `pass` 的 `ai_pre_review`；二者会分别持久化审计信息：
 
 ```powershell
 cd backend
@@ -72,9 +74,9 @@ python scripts/import_v18_diagnostic_questions.py scripts/v18_diagnostic_questio
 python scripts/run_v18_engineering_acceptance.py
 ```
 
-模板中的占位符不能直接导入；它是人工审校题目的结构说明，避免把生成内容冒充正式测评资产。
+模板中的占位符不能直接导入；它是受控题目导入结构说明，避免把生成内容冒充人工审校资产。
 
-仓库另附 `backend/scripts/v18_v142_engineering_samples.json`：它是明确标注为“非学科人工审校”的工程验证样例，只用于验证已激活的 v142 内容包能被受控题库读取。正式发布前必须由学科审核人以同一导入格式替换或复审。
+仓库另附 `backend/scripts/v18_v142_engineering_samples.json`：它是明确标注为“非学科人工审校”的工程验证样例，只用于验证已激活的 v142 内容包能被受控题库读取。
 
 2026-11-23 已对本机 active `v142` 运行该工程样例导入，结果为 `created: 1, skipped: 0`。
 
