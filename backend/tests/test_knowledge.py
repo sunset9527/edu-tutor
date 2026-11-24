@@ -1,4 +1,7 @@
-"""v0.3 知识引擎测试：PDF 提取 + 图谱落库/统计 + 记忆-知识点关联"""
+"""v0.3 知识引擎测试：PDF 提取 + 图谱落库/统计 + 记忆-知识点关联。"""
+import os
+from pathlib import Path
+
 import pytest
 
 from app.core.database import SessionLocal
@@ -7,11 +10,16 @@ from app.services.knowledge.graph_service import KnowledgeGraphService
 from app.services.knowledge.pdf_parser import extract_text_by_pages
 from app.services.memory.storage import MemoryStorage
 
-PDF_QIYI = r"E:\个人发展\002职业\项目4：个性化教育\知识库\初中\初中数学\2024 人教版数学 七年级上册电子课本（高清正式版）.pdf"
+PDF_QIYI = Path(os.getenv(
+    "EDUTUTOR_PDF_FIXTURE",
+    r"E:\个人发展\002职业\项目4：个性化教育\知识库\初中\初中数学\2024 人教版数学 七年级上册电子课本（高清正式版）.pdf",
+))
 
 
 def test_pdf_extract_text():
-    """教材 PDF 可提取文本（文字版，非扫描）"""
+    """存在本机教材时验证 PDF 提取；仓库克隆环境可明确跳过。"""
+    if not PDF_QIYI.is_file():
+        pytest.skip(f"本机 PDF 集成夹具不存在：{PDF_QIYI}；设置 EDUTUTOR_PDF_FIXTURE 后可启用")
     pages = extract_text_by_pages(PDF_QIYI)
     assert len(pages) > 50, f"应提取大量文本页，实际 {len(pages)}"
 
