@@ -1,0 +1,24 @@
+[
+  {
+    "knowledge_point_id": 1736,
+    "question_type": "objective",
+    "difficulty": "基础",
+    "stem": "2 小时等于多少分钟？",
+    "options": [
+      "60",
+      "120",
+      "200"
+    ],
+    "answer_key": {
+      "value": "120"
+    },
+    "max_score": 1,
+    "review_mode": "ai_pre_review",
+    "ai_model": "deepseek-v4-flash",
+    "ai_review": {
+      "decision": "pass",
+      "issues": [],
+      "summary": "题干表述清晰，选项与答案匹配，难度适合基础题，无歧义或评分问题。"
+    }
+  }
+]

@@ -1,6 +1,6 @@
 # v1.8 诊断题学科审校交接包
 
-工程已实现受控导入和验收门禁，但学科内容不能由工程人员或模型冒充审校完成。本包供小学数学学科审核人完成正式发布前的最后一步。
+工程已实现受控导入和验收门禁。题库可采用真实人工审校，或采用明确标注的 AI 初审演示口径；两者不得混同。
 
 ## 审校输入
 
@@ -25,3 +25,13 @@ python scripts/run_v18_engineering_acceptance.py
 ```
 
 第二个命令会生成 `docs/releases/v1.8/engineering-sample-output.json`。该 JSON 只能证明工程闭环可复现，不能替代题目学科质量结论或真实学习效果评估。
+
+## AI 初审演示口径
+
+```powershell
+cd backend
+python scripts/ai_review_v18_diagnostic_questions.py <候选题目.json> <AI初审输出.json>
+python scripts/import_v18_diagnostic_questions.py <AI初审输出.json> --version-id 142
+```
+
+只有模型结论为 `pass` 的题目才会导入。导入记录会保存 `review_mode=ai_pre_review`、模型名、审查结论、问题清单与审查时间；它不是人工签署，也不能描述为教师审定题库。

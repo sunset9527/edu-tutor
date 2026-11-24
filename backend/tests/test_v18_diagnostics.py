@@ -6,7 +6,7 @@ import importlib
 def test_diagnostic_question_model_requires_governed_knowledge_references():
     module = importlib.import_module("app.models.diagnostics")
     columns = set(module.DiagnosticQuestion.__table__.columns.keys())
-    assert {"knowledge_version_id", "knowledge_point_id", "source_chunk_id", "status", "reviewed_by", "review_note"} <= columns
+    assert {"knowledge_version_id", "knowledge_point_id", "source_chunk_id", "status", "reviewed_by", "review_note", "review_mode", "ai_model", "ai_review_json", "ai_reviewed_at"} <= columns
 
 
 def test_diagnostic_session_and_answers_preserve_fixed_evidence():

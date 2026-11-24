@@ -86,4 +86,8 @@ python scripts/run_v18_engineering_acceptance.py
 
 ## 学科审校交接
 
-正式诊断题仍必须由真实学科审核人复核；工程不得将样例伪称为审校完成。审核清单、导入命令与质量边界见 [subject_review_handoff.md](subject_review_handoff.md)。
+题库支持两种可审计口径：`human_review` 代表真实人工审校，`ai_pre_review` 代表 AI 初审演示题。两者不会混写；AI 初审不等同于人工或官方教材认证。审核清单、导入命令与质量边界见 [subject_review_handoff.md](subject_review_handoff.md)。
+
+## AI 初审演示题
+
+2026-11-24 已使用 `deepseek-v4-flash` 对 `scripts/v18_v142_ai_review_candidate.json` 运行 AI 初审，输出为 `scripts/v18_v142_ai_reviewed.json`。结论为 `pass`、问题清单为空；随后已导入 active v142（`created: 1, skipped: 0`）。该题及其数据库记录明确标注 `review_mode: ai_pre_review`，仅用作演示题库。

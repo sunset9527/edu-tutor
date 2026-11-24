@@ -1,0 +1,11 @@
+[
+  {
+    "knowledge_point_id": 1736,
+    "question_type": "objective",
+    "difficulty": "基础",
+    "stem": "2 小时等于多少分钟？",
+    "options": ["60", "120", "200"],
+    "answer_key": {"value": "120"},
+    "max_score": 1
+  }
+]

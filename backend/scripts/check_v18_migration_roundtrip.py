@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.core.config import settings
 
 TEMP_DB=f"edu_tutor_v18_migration_check_{uuid4().hex[:12]}"
-V18="a9d1f3e5b726"; PRE_V18="7efb3126a01c"
+V18="b6e2c8f4a913"; PRE_V18="7efb3126a01c"
 REQUIRED={"diagnostic_questions","diagnostic_sessions","diagnostic_answers","diagnostic_knowledge_results","learning_plan_versions","learning_plan_items"}
 def conn(db=None): return pymysql.connect(host=settings.mysql_host,port=settings.mysql_port,user=settings.mysql_user,password=settings.mysql_password,database=db,charset="utf8mb4",autocommit=True)
 def alembic(*args):
@@ -22,6 +22,7 @@ def run():
             x.execute("SHOW TABLES");up={r[0] for r in x.fetchall()}
             x.execute("SHOW COLUMNS FROM diagnostic_answers LIKE 'final_score_reason'");reason_column=bool(x.fetchone())
             x.execute("SHOW COLUMNS FROM diagnostic_questions LIKE 'reviewed_by'");review_columns=bool(x.fetchone())
+            x.execute("SHOW COLUMNS FROM diagnostic_questions LIKE 'ai_review_json'");ai_review_columns=bool(x.fetchone())
             x.execute("SHOW TRIGGERS LIKE 'diagnostic_questions'");immutability_trigger=any(r[0] == "trg_diagnostic_questions_published_immutable" for r in x.fetchall())
     alembic("downgrade",PRE_V18)
     with conn(TEMP_DB) as c:
@@ -29,6 +30,6 @@ def run():
     alembic("upgrade",V18)
     with conn(TEMP_DB) as c:
         with c.cursor() as x:x.execute("SHOW TABLES");restored={r[0] for r in x.fetchall()}
-    return {"temporary_database":TEMP_DB,"upgrade_has_required":REQUIRED<=up,"upgrade_has_final_score_reason":reason_column,"upgrade_has_review_audit":review_columns,"upgrade_has_immutability_trigger":immutability_trigger,"downgrade_removed_diagnostic_tables":removed,"restore_has_required":REQUIRED<=restored}
+    return {"temporary_database":TEMP_DB,"upgrade_has_required":REQUIRED<=up,"upgrade_has_final_score_reason":reason_column,"upgrade_has_review_audit":review_columns,"upgrade_has_ai_review_audit":ai_review_columns,"upgrade_has_immutability_trigger":immutability_trigger,"downgrade_removed_diagnostic_tables":removed,"restore_has_required":REQUIRED<=restored}
 if __name__=="__main__":
     import json;print(json.dumps(run(),ensure_ascii=False,indent=2))
